@@ -1,0 +1,396 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-lane: var(--lane);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-faint: var(--faint);
+
+  --color-full: var(--accent);
+  --color-refuse: #d9361c;
+  --color-good: var(--good);
+
+  --ease-out-soft: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Cada sprint es un momento del día: el mismo tablero, de día y de noche. */
+html,
+html[data-sprint="1"] {
+  color-scheme: light;
+  --canvas: #edebe6;
+  --card: #ffffff;
+  --lane: rgb(17 17 17 / 0.045);
+  --lane-over: rgb(232 80 28 / 0.1);
+  --line: rgb(17 17 17 / 0.09);
+  --line-strong: rgb(17 17 17 / 0.16);
+  --ink: #111111;
+  --soft: #5c5b57;
+  --faint: #8b8983;
+  --accent: #e8501c;
+  --good: #1a7f5a;
+  --float: rgb(255 255 255 / 0.96);
+  --island: #000000;
+  --island-shadow: 0 14px 34px -12px rgb(0 0 0 / 0.5);
+  --shadow-card: 0 0 0 1px rgb(17 17 17 / 0.05), 0 1px 1px rgb(17 17 17 / 0.04), 0 10px 22px -14px rgb(17 17 17 / 0.25);
+  --shadow-lift: 0 0 0 1px rgb(17 17 17 / 0.06), 0 26px 44px -14px rgb(17 17 17 / 0.4);
+  --shadow-float: 0 0 0 1px rgb(17 17 17 / 0.07), 0 10px 30px -10px rgb(17 17 17 / 0.28);
+}
+
+html[data-sprint="2"] {
+  color-scheme: dark;
+  --canvas: #0e0e10;
+  --card: #1a1a1e;
+  --lane: rgb(255 255 255 / 0.045);
+  --lane-over: rgb(255 106 43 / 0.14);
+  --line: rgb(255 255 255 / 0.09);
+  --line-strong: rgb(255 255 255 / 0.2);
+  --ink: #f3f2ee;
+  --soft: #a9a8a3;
+  --faint: #7f7e7a;
+  --accent: #ff6a2b;
+  --good: #4fd19a;
+  --float: rgb(30 30 34 / 0.97);
+  --island: #000000;
+  --island-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 18px 40px -12px rgb(0 0 0 / 0.9);
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 10px 22px -14px rgb(0 0 0 / 0.8);
+  --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.1), 0 26px 44px -14px rgb(0 0 0 / 0.9);
+  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.09), 0 10px 30px -10px rgb(0 0 0 / 0.8);
+}
+
+html {
+  height: 100%;
+  background: var(--canvas);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--accent);
+}
+
+#root {
+  height: 100%;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+@layer base {
+  button {
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    touch-action: manipulation;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+body.is-dragging,
+body.is-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.stage {
+  touch-action: none;
+  cursor: default;
+  background: var(--canvas);
+  transition: background-color 200ms linear;
+}
+
+body.is-panning,
+body.is-panning * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.float {
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+}
+
+/* La isla es hardware: siempre negra, de día y de noche. */
+.island {
+  contain: layout paint;
+  background: var(--island);
+  box-shadow: var(--island-shadow);
+}
+
+/* Calidad ligera: lo que cuesta pintar se va; el movimiento se queda. */
+html[data-quality="lite"] .dots {
+  display: none;
+}
+
+html[data-quality="lite"] .lid {
+  animation: none;
+}
+
+html[data-quality="lite"] .card {
+  transition: none;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+html[data-quality="lite"] .island {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14);
+}
+
+html[data-quality="lite"] [data-world] {
+  will-change: transform;
+}
+
+.island-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.25) transparent;
+}
+
+.card {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 400ms var(--ease-out-soft);
+}
+
+.card-lifted {
+  box-shadow: var(--shadow-lift);
+}
+
+/* Aviso breve al aterrizar: el color dice qué pasó con la nota. */
+.card-up {
+  box-shadow: 0 0 0 2px var(--ink), var(--shadow-card);
+}
+
+.card-done {
+  box-shadow: 0 0 0 2px var(--good), var(--shadow-card);
+}
+
+.card-down,
+.card-huh {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-card);
+}
+
+.note-handle {
+  -webkit-touch-callout: none;
+  user-select: none;
+  cursor: grab;
+}
+
+/* Parpadeo con pasos: solo repinta cuando se cierra el ojo, nunca en cada cuadro. */
+.lid {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lid {
+    animation: blink 6.4s steps(1) infinite;
+  }
+
+  .type-caret {
+    animation: caret 1s steps(1) infinite;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  97% {
+    opacity: 1;
+  }
+  98.6% {
+    opacity: 0;
+  }
+}
+
+@keyframes caret {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes wip-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  60% {
+    transform: translateX(2px);
+  }
+}
+
+.wip-flash {
+  animation: wip-shake 420ms var(--ease-out-soft);
+}
+
+.nudge {
+  opacity: 0;
+  transition:
+    opacity 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.note-handle:hover .nudge,
+.note-handle:focus-within .nudge,
+.nudge:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .nudge {
+    opacity: 1;
+  }
+}
+
+/* Clawd: lo que es continuo y barato va en CSS, sin pasar por React. */
+.cl-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cl-blink {
+    animation: cl-blink 3.6s linear infinite;
+  }
+
+  .cl-look {
+    animation: cl-look 7s ease-in-out infinite;
+  }
+
+  .cl-z {
+    animation: cl-z 2.6s ease-out infinite;
+  }
+
+  .cl-z-b {
+    animation-delay: -1.3s;
+  }
+
+  .cl-steam {
+    animation: cl-steam 2.4s ease-out infinite;
+  }
+
+  .cl-steam-b {
+    animation-delay: 1.2s;
+  }
+
+  .cl-spin {
+    animation: cl-spin 5s linear infinite;
+  }
+
+  .clock-colon {
+    animation: clock-colon 2s ease-in-out infinite;
+  }
+}
+
+html[data-quality="lite"] .cl-spin,
+html[data-quality="lite"] .cl-look,
+html[data-quality="lite"] .clock-colon {
+  animation: none;
+}
+
+html[data-sprint="2"] .dark-amber {
+  color: #e8b93a;
+}
+
+@keyframes cl-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes cl-look {
+  0%,
+  40%,
+  80% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-0.35px);
+  }
+  60% {
+    transform: translateX(0.35px);
+  }
+}
+
+@keyframes cl-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(1.6px, -3px);
+  }
+}
+
+@keyframes cl-steam {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1.6px);
+  }
+}
+
+@keyframes cl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes clock-colon {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Puntos del lienzo: se mueven con la cámara, así se siente que el tablero es un espacio. */
+.dots {
+  background-image: radial-gradient(circle at 1px 1px, var(--line-strong) 1px, transparent 1.2px);
+}
