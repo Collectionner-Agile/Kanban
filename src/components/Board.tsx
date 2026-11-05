@@ -3,12 +3,14 @@ import { AnimatePresence, LayoutGroup, animate, motion, useMotionValue, useTrans
 import { CLASSES, LANE_INDEX, SPRINTS, type LaneId, type SprintId } from '../data/board'
 import { PERSON, TEAM, type PersonId } from '../data/team'
 import { cam, frame, goToLane, markInput, overview, overviewScale, panBy, setCameraNow, startDirector, worldRectOf, zoomAt } from '../engine/camera'
-import { setAgentsOn, setCameraOn, travelTo, useBoard } from '../store/board'
+import { peekSprint } from '../engine/player'
+import { setCameraOn, useBoard } from '../store/board'
+import { NewNote } from './NewNote'
 import { FlowChart } from './FlowChart'
 import { Lane } from './Lane'
 import { Overlay } from './Overlay'
 import { Portrait } from './Portrait'
-import { Camera, Close, Cursor, Question } from './icons'
+import { Camera, Close, Plus, Question } from './icons'
 import { Island } from './Island'
 import { Clock, Station } from './Station'
 
@@ -18,6 +20,7 @@ const DOT_STEP = 26
 /** Indicador líquido: el borde que va delante se estira y el de atrás lo alcanza después. */
 function SprintTabs() {
   const current = useBoard((s) => s.sprint)
+  const live = useBoard((s) => s.liveSprint)
   const scene = useBoard((s) => s.scene)
   const root = useRef<HTMLDivElement>(null)
   const left = useMotionValue(0)
@@ -47,7 +50,7 @@ function SprintTabs() {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
     e.preventDefault()
     const target: SprintId = current === 1 ? 2 : 1
-    if (travelTo(target)) document.getElementById(`tab-${target}`)?.focus({ preventScroll: true })
+    if (peekSprint(target)) document.getElementById(`tab-${target}`)?.focus({ preventScroll: true })
   }
 
   return (
@@ -65,12 +68,13 @@ function SprintTabs() {
             aria-selected={selected}
             aria-controls="board-panel"
             tabIndex={selected ? 0 : -1}
-            onClick={() => travelTo(id)}
+            onClick={() => peekSprint(id)}
             disabled={scene !== 'live' && !selected}
             className={`relative rounded-full px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors duration-200 ${
               selected ? 'text-card' : 'text-soft hover:text-ink'
             }`}
           >
+            {live === id && <i aria-label="en vivo" className="mr-1.5 inline-block size-1.5 translate-y-[-1px] rounded-full bg-[var(--accent)]" />}
             {sprint.name}
             <span className={`ml-1.5 hidden font-normal sm:inline ${selected ? 'opacity-65' : 'text-faint'}`}>{sprint.tag}</span>
           </button>
@@ -157,6 +161,8 @@ function Help() {
               <li>La cámara sigue el trabajo sola. Arrastra el fondo o usa la rueda para moverte; ctrl y rueda para acercar.</li>
               <li>Cada mouse es de una persona y solo mueve las notas de esa persona.</li>
               <li>La isla negra cuenta quién hizo qué. Tócala para ver todo el historial y filtrar por persona.</li>
+              <li>Todas las pantallas ven el mismo tablero en el mismo momento. El punto marca el sprint en vivo.</li>
+              <li>Con el botón + creas una nota propia: solo aparece en tu pantalla.</li>
             </ul>
             <ul className="mt-3 space-y-1 border-t border-line pt-3 text-[12.5px]">
               {Object.values(CLASSES).map((cls) => (
@@ -295,12 +301,12 @@ export function Board({ onReplay }: { onReplay: () => void }) {
   const scene = useBoard((s) => s.scene)
   const cards = useBoard((s) => s.cards)
   const archived = useBoard((s) => s.archived)
-  const agentsOn = useBoard((s) => s.agentsOn)
   const cameraOn = useBoard((s) => s.cameraOn)
   const sprint = SPRINTS[sprintId]
   const last = sprint.lanes[sprint.lanes.length - 1].id
   const delivered = cards.filter((c) => c.lane === last).length + archived
   const inCloseUp = useBoard((s) => s.focus !== null)
+  const [creating, setCreating] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const dotX = useTransform(cam.x, (v) => ((v % DOT_STEP) + DOT_STEP) % DOT_STEP - DOT_STEP)
   const dotY = useTransform(cam.y, (v) => ((v % DOT_STEP) + DOT_STEP) % DOT_STEP - DOT_STEP)
@@ -337,9 +343,8 @@ export function Board({ onReplay }: { onReplay: () => void }) {
   const onPointerDown = (e: ReactPointerEvent) => {
     markInput()
     const target = e.target as HTMLElement
-    const onNote = target.closest('[data-note], button, input, a')
-    if (e.pointerType !== 'touch' && (onNote || e.button !== 0)) return
-    if (target.closest('button, input')) return
+    if (e.pointerType !== 'touch' && e.button !== 0) return
+    if (target.closest('button, input, a')) return
     let lastX = e.clientX
     let lastY = e.clientY
     let moved = false
@@ -398,8 +403,8 @@ export function Board({ onReplay }: { onReplay: () => void }) {
             </div>
           </div>
           <div className="flex items-start gap-2.5">
-            {sprint.lanes.map((lane, i) => (
-              <Lane key={lane.id} lane={lane} first={i === 0} />
+            {sprint.lanes.map((lane) => (
+              <Lane key={lane.id} lane={lane} />
             ))}
           </div>
           <Overlay />
@@ -419,13 +424,22 @@ export function Board({ onReplay }: { onReplay: () => void }) {
           <span className="hidden pr-2 pl-2.5 min-[1120px]:inline-flex">
             <Clock showDay />
           </span>
-          <Switch label="Agentes" icon={<Cursor size={14} />} on={agentsOn} onChange={setAgentsOn} />
           <Switch label="Cámara" icon={<Camera size={14} />} on={cameraOn} onChange={setCameraOn} />
+          <button
+            type="button"
+            aria-label="Nueva nota"
+            title="Nueva nota"
+            onClick={() => setCreating(true)}
+            className="ml-0.5 grid size-7 place-items-center rounded-full bg-ink text-card transition-transform duration-150 active:scale-[0.96]"
+          >
+            <Plus size={14} />
+          </button>
           <Help />
         </div>
       </div>
 
       <Island />
+      <NewNote open={creating} onClose={() => setCreating(false)} />
 
       <div data-dock className="pointer-events-none absolute inset-x-0 bottom-0 z-30 mx-auto max-w-[1180px] px-3 pb-3 sm:px-4 sm:pb-4">
         <Station />

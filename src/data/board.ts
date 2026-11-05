@@ -63,6 +63,11 @@ export type Card = {
   startedAt?: number
   dueAt?: number
   doneAt?: number
+  /* Notas creadas en esta pantalla. */
+  local?: boolean
+  sprint?: SprintId
+  createdAt?: number
+  pausedAt?: number
 }
 
 /** Área y detalle de cada nota: es lo que hace que el tablero se lea como trabajo real. */

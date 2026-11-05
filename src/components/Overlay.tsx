@@ -1,5 +1,5 @@
-import { motion, useSpring, useTransform, useVelocity } from 'motion/react'
-import { TEAM, type Person } from '../data/team'
+import { AnimatePresence, motion, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
+import { PERSON, TEAM, type Person } from '../data/team'
 import { ghostFace } from '../engine/carry'
 import { cursors, findCard, useBoard, type Ghost } from '../store/board'
 import { NoteBody } from './NoteBody'
@@ -30,19 +30,22 @@ function AgentCursor({ person }: { person: Person }) {
   const on = useBoard((s) => s.agentsOn)
   const scene = useBoard((s) => s.scene)
   const { x, y } = cursors[person.id]
+  return <CursorView person={person} label={agent.label} pressed={agent.pressed} visible={agent.ready && on && scene === 'live'} x={x} y={y} />
+}
+
+function CursorView({ person, label, pressed, visible, x, y }: { person: Person; label: string; pressed: boolean; visible: boolean; x: MotionValue<number>; y: MotionValue<number> }) {
   const vx = useVelocity(x)
   const vy = useVelocity(y)
 
   // Inclinación por velocidad: idea del componente Cursor de unlumen en 21st.dev.
   const lean = useTransform([vx, vy], ([a, b]: number[]) => Math.max(-14, Math.min(14, (a / 1000) * 16 + (b / 1000) * 5)))
   const rotate = useSpring(lean, { stiffness: 70, damping: 16 })
-  const visible = agent.ready && on && scene === 'live'
 
   return (
-    <motion.div className="pointer-events-none absolute top-0 left-0 z-50" style={{ x, y }} aria-hidden="true">
+    <motion.div className="pointer-events-none absolute top-0 left-0 z-50" style={{ x, y }} aria-hidden="true" data-agent-cursor={person.id} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: visible ? 1 : 0, scale: visible ? (agent.pressed ? 0.88 : 1) : 0.8 }}
+        animate={{ opacity: visible ? 1 : 0, scale: visible ? (pressed ? 0.88 : 1) : 0.8 }}
         transition={{ type: 'spring', visualDuration: 0.3, bounce: 0.15 }}
         style={{ originX: 0, originY: 0 }}
       >
@@ -66,7 +69,7 @@ function AgentCursor({ person }: { person: Person }) {
           style={{ backgroundColor: person.color }}
         >
           {person.name}
-          {agent.label ? ` ${agent.label}` : ''}
+          {label ? ` ${label}` : ''}
         </span>
       </motion.div>
     </motion.div>
@@ -76,6 +79,7 @@ function AgentCursor({ person }: { person: Person }) {
 /** Notas en el aire y cursores: viven dentro del mundo, así la cámara los lleva con todo lo demás. */
 export function Overlay() {
   const ghosts = useBoard((s) => s.ghosts)
+  const own = useBoard((s) => s.localCursors)
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
       {ghosts.map((ghost) => (
@@ -84,6 +88,11 @@ export function Overlay() {
       {TEAM.map((person) => (
         <AgentCursor key={person.id} person={person} />
       ))}
+      <AnimatePresence>
+        {own.map((c) => (
+          <CursorView key={c.id} person={PERSON[c.owner]} label={c.label} pressed={c.pressed} visible x={c.x} y={c.y} />
+        ))}
+      </AnimatePresence>
     </div>
   )
 }

@@ -1,70 +1,11 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo } from 'react'
 import { motion } from 'motion/react'
 import type { Lane as LaneData } from '../data/board'
-import { addCard, useBoard } from '../store/board'
+import { useBoard } from '../store/board'
 import { NoteCard } from './NoteCard'
-import { Lock, Plus } from './icons'
+import { Lock } from './icons'
 
-function AddNote() {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState('')
-
-  const submit = () => {
-    const clean = title.trim()
-    if (clean) {
-      addCard(clean)
-    }
-    setTitle('')
-    setOpen(false)
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-2 flex w-full items-center gap-1.5 rounded-[12px] px-2.5 py-2.5 text-[13px] font-medium text-soft transition-colors duration-150 hover:bg-lane hover:text-ink"
-      >
-        <Plus size={13} />
-        Nueva nota
-      </button>
-    )
-  }
-
-  return (
-    <form
-      className="mt-2"
-      onSubmit={(e) => {
-        e.preventDefault()
-        submit()
-      }}
-    >
-      <label className="sr-only" htmlFor="new-note">
-        Título de la nota
-      </label>
-      <input
-        id="new-note"
-        autoFocus
-        name="note"
-        autoComplete="off"
-        value={title}
-        maxLength={60}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={submit}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setTitle('')
-            setOpen(false)
-          }
-        }}
-        placeholder="Título de la nota…"
-        className="w-full rounded-[12px] bg-card px-3 py-2.5 text-[13.5px] shadow-[var(--shadow-card)] outline-none placeholder:text-faint focus-visible:shadow-[0_0_0_2px_var(--accent)]"
-      />
-    </form>
-  )
-}
-
-export const Lane = memo(function Lane({ lane, first }: { lane: LaneData; first: boolean }) {
+export const Lane = memo(function Lane({ lane }: { lane: LaneData }) {
   const allCards = useBoard((s) => s.cards)
   const ghosts = useBoard((s) => s.ghosts)
   const flash = useBoard((s) => s.laneFlash[lane.id] ?? 0)
@@ -75,9 +16,6 @@ export const Lane = memo(function Lane({ lane, first }: { lane: LaneData; first:
   const limit = lane.wip
   const full = limit !== null && cards.length >= limit
   const incoming = ghosts.filter((g) => g.target === lane.id && g.from !== lane.id)
-  const hovered = incoming.some((g) => g.by === 'user')
-  const blocked = hovered && full
-  const accepting = hovered && !full
 
   return (
     <section
@@ -86,7 +24,7 @@ export const Lane = memo(function Lane({ lane, first }: { lane: LaneData; first:
       title={lane.hint}
       className="w-[276px] shrink-0 rounded-[20px] p-2.5 transition-[background-color,opacity] duration-500"
       style={{
-        backgroundColor: blocked ? 'color-mix(in oklab, var(--accent) 16%, transparent)' : accepting ? 'var(--lane-over)' : 'var(--lane)',
+        backgroundColor: 'var(--lane)',
         opacity: dimmed ? 0.34 : 1,
       }}
     >
@@ -144,9 +82,6 @@ export const Lane = memo(function Lane({ lane, first }: { lane: LaneData; first:
         )}
       </ul>
 
-      {/* Va al pie del carril para que la nota arrastrada no lo tape. */}
-      {blocked && <p className="mt-2 px-1.5 text-[13px] leading-[1.3] font-medium text-[var(--accent)]">Carril lleno. Termina una nota primero.</p>}
-      {first && <AddNote />}
       {lane.kind === 'end' && archived > 0 && <p className="mt-2 px-1.5 text-[12.5px] text-soft">y {archived} archivadas</p>}
     </section>
   )

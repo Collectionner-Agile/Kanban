@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { SPRINTS, type Lane, type LaneId, type SprintId } from '../data/board'
-import { useBoard, getState } from '../store/board'
+import { useMemo } from 'react'
+import { SPRINTS, type Lane, type LaneId } from '../data/board'
+import { useClock } from '../engine/clock'
+import { flowAt, localTime } from '../engine/script'
+import { useBoard } from '../store/board'
 
 type Sample = [number, number, number, number]
 
@@ -18,36 +20,14 @@ function stagesOf(lanes: Lane[]) {
   return groups
 }
 
-function sampleNow(sprint: SprintId): Sample {
-  const { cards, archived } = getState()
-  const lanes = SPRINTS[sprint].lanes
-  const groups = stagesOf(lanes)
-  const end = lanes[lanes.length - 1].id
-  const inGroup = (i: number) => cards.filter((c) => groups[i].lanes.includes(c.lane)).length
-  return [cards.filter((c) => c.lane === end).length + archived, inGroup(2), inGroup(1), inGroup(0)]
-}
-
 /**
  * Diagrama de flujo acumulado: la gráfica clásica de Kanban. Se dibuja con lo que pasa de verdad
- * en el tablero desde que lo abriste, no con datos de adorno.
+ * en el tablero, y es la misma en todas las pantallas.
  */
 export function FlowChart() {
   const sprint = useBoard((s) => s.sprint)
-  const scene = useBoard((s) => s.scene)
-  const [history, setHistory] = useState<Partial<Record<SprintId, Sample[]>>>({})
-
-  useEffect(() => {
-    const take = () => {
-      if (getState().scene !== 'live' && getState().scene !== 'enter') return
-      const next = sampleNow(sprint)
-      setHistory((h) => ({ ...h, [sprint]: [...(h[sprint] ?? [next]), next].slice(-90) }))
-    }
-    take()
-    const timer = window.setInterval(take, 1500)
-    return () => window.clearInterval(timer)
-  }, [sprint, scene])
-
-  const samples = history[sprint] ?? [sampleNow(sprint)]
+  const step = useClock((now) => Math.floor(localTime(sprint, now) / 4000))
+  const samples: Sample[] = useMemo(() => flowAt(sprint, step * 4000), [sprint, step])
   const now = samples[samples.length - 1]
   const groups = useMemo(() => stagesOf(SPRINTS[sprint].lanes), [sprint])
 

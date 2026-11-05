@@ -193,7 +193,7 @@ html[data-quality="lite"] [data-world] {
 .note-handle {
   -webkit-touch-callout: none;
   user-select: none;
-  cursor: grab;
+  cursor: default;
 }
 
 /* Parpadeo con pasos: solo repinta cuando se cierra el ojo, nunca en cada cuadro. */
@@ -250,25 +250,6 @@ html[data-quality="lite"] [data-world] {
 
 .wip-flash {
   animation: wip-shake 420ms var(--ease-out-soft);
-}
-
-.nudge {
-  opacity: 0;
-  transition:
-    opacity 150ms ease-out,
-    background-color 150ms ease-out;
-}
-
-.note-handle:hover .nudge,
-.note-handle:focus-within .nudge,
-.nudge:focus-visible {
-  opacity: 1;
-}
-
-@media (pointer: coarse) {
-  .nudge {
-    opacity: 1;
-  }
 }
 
 /* Clawd: lo que es continuo y barato va en CSS, sin pasar por React. */

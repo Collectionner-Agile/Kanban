@@ -4,8 +4,10 @@ import { Board } from './components/Board'
 import { PortraitDefs } from './components/PortraitDefs'
 import { Shaft } from './components/Shaft'
 import { SPRINTS } from './data/board'
-import { startAgents } from './engine/agents'
-import { getState, resetBoard, setScene, swapFloor, useBoard } from './store/board'
+import { syncServerTime } from './engine/clock'
+import { loadNotes } from './engine/localNotes'
+import { arrive, startPlayer } from './engine/player'
+import { getState, resetBoard, setScene, useBoard } from './store/board'
 import { startQuality } from './engine/quality'
 
 /** Lo que tarda el círculo en cubrir la pantalla. */
@@ -13,8 +15,6 @@ const OPEN_MS = 650
 /** Lo que tarda el tablero en aparecer mientras la frase se va. */
 const ENTER_MS = 1000
 
-/** Lo que dura la frase en pantalla: alcanza para leerla entera, sea corta o larga. */
-const holdFor = (phrase: string) => 1300 + phrase.length * 30
 /** La entrada se toma su tiempo: el saludo, Clawd y el equipo se ven con calma. */
 const INTRO_MS = 5500
 
@@ -33,12 +33,12 @@ function Experience({ onReplay }: { onReplay: () => void }) {
   // La coreografía del cambio de sprint: cada escena dice cuánto dura y cuál sigue.
   useEffect(() => {
     if (scene === 'live') return
-    const hold = isIntro.current ? INTRO_MS : holdFor(getState().phrase)
+    const hold = isIntro.current ? INTRO_MS : getState().holdMs
     if (scene === 'enter') isIntro.current = false
     const timer = window.setTimeout(
       () => {
         if (scene === 'leave') {
-          swapFloor()
+          arrive()
           setScene('shaft')
         } else if (scene === 'shaft') {
           setScene('enter')
@@ -54,7 +54,9 @@ function Experience({ onReplay }: { onReplay: () => void }) {
   // Un clic o una tecla adelantan el cambio: nunca obliga a esperar.
   useEffect(() => {
     if (scene !== 'shaft') return
-    const skip = () => setScene('enter')
+    const skip = () => {
+      if (!document.querySelector('dialog[open]')) setScene('enter')
+    }
     window.addEventListener('pointerdown', skip)
     window.addEventListener('keydown', skip)
     return () => {
@@ -65,7 +67,7 @@ function Experience({ onReplay }: { onReplay: () => void }) {
 
   useEffect(() => {
     if (scene !== 'live') return
-    return startAgents()
+    return startPlayer()
   }, [scene])
 
   // Tapado por el círculo se coloca inclinado; luego llega hasta quedar de frente, sobre el mismo color.
@@ -99,6 +101,10 @@ function Experience({ onReplay }: { onReplay: () => void }) {
 
 export default function App() {
   useEffect(() => startQuality(), [])
+  useEffect(() => {
+    loadNotes()
+    void syncServerTime()
+  }, [])
   const reduced = useReducedMotion() ?? false
   const [run, setRun] = useState(() => {
     if (reduced) resetBoard(false, true)

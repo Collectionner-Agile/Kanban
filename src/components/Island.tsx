@@ -4,7 +4,7 @@ import { LANE, SPRINTS, type SprintId } from '../data/board'
 import { PERSON, TEAM, type PersonId } from '../data/team'
 import { goToCard, overview, refit, setCameraInset } from '../engine/camera'
 import { clockText, spanText, useClock } from '../engine/clock'
-import { clearActivity, dismissActivity, holdIsland, setPanelOpen, startIsland, useBoard, type Activity, type ActivityKind, type Face } from '../store/board'
+import { clearActivity, dismissActivity, holdIsland, setPanelOpen, useBoard, type Activity, type ActivityKind, type Face } from '../store/board'
 import { Clawd, type ClawdAction, type ClawdEyes, type ClawdGear } from './Clawd'
 import { Portrait } from './Portrait'
 import { Check, ChevronRight, Close, Lock, Plus, Returned } from './icons'
@@ -477,9 +477,8 @@ const belongsTo = (a: Activity, id: PersonId) => a.who === id || (a.who === 'use
  */
 export function Island() {
   const alert = useBoard((s) => s.alert)
-  const waiting = useBoard((s) => s.pending.length)
+  const waiting = useBoard((s) => s.waiting)
   const open = useBoard((s) => s.panelOpen)
-  const scene = useBoard((s) => s.scene)
   const activity = useBoard((s) => s.activity)
   const calm = useReducedMotion()
   const [size, setSize] = useState<Size>(readSize)
@@ -498,10 +497,6 @@ export function Island() {
       watcher.disconnect()
     }
   }, [])
-
-  useEffect(() => {
-    if (scene === 'live') startIsland()
-  }, [scene])
 
   const rows = useMemo(() => (who === 'all' ? activity : activity.filter((a) => belongsTo(a, who))), [activity, who])
   const counts = useMemo(() => {

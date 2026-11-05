@@ -48,3 +48,9 @@ Geist en todo. Titulares con espaciado -0.035em.
 - Reloj: hora real, cada dígito rueda por su cuenta. El saludo de la entrada sale de esa hora (días, tardes, noches).
 - Notas: fecha, hora de inicio y hora planificada, con estado real (a tiempo, por vencer, atrasada). Al entregar, cuánto sobró o cuánto se pasó. Lo planificado es 3 min más 40 s por punto, a la escala de los agentes de la demo.
 - Clawd (dibujo de clawd-md, MIT, Jamey Prüfert) no da avisos: los avisos son solo de la isla. Hay uno dentro de la isla, siempre el mismo, que cambia de gesto con cada aviso, y otro sobre el mapa de carriles, cuyo ánimo sale del estado del sprint: trabaja con laptop, baila al entregar a tiempo, se inquieta si regresa una nota, revisa con lentes si hay atrasos, duerme con los agentes en pausa y lleva corona con todo entregado. Cada gesto parte del reposo y vuelve a él, sin cortes.
+
+## Guion compartido
+
+- Todas las pantallas calculan la misma película a partir de la hora, sin servidor: 12 minutos, 6 por sprint. Quien entra cae en el segundo exacto, y las notas, mouses, isla, cámara y gráfica coinciden.
+- Lo propio de cada pantalla: la entrada, mirar otro sprint un momento, mover la cámara, y quitar filas del historial.
+- Notas propias: se crean con el botón +, piden responsable, tipo, esfuerzo y fecha si aplica, empiezan a moverse solas y se guardan en este navegador. Solo las ve quien las crea. Si una nota del guion necesita el sitio, la propia cede, para que el WIP siempre se respete.

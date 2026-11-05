@@ -1,6 +1,25 @@
 import { useSyncExternalStore } from 'react'
 import type { Card } from '../data/board'
 
+let offset = 0
+/** La hora común. Si el reloj de este equipo está mal, se corrige con la del servidor. */
+export const serverNow = () => Date.now() + offset
+
+/** El encabezado Date solo da segundos: por debajo de 2 s el reloj local es mejor que esta lectura. */
+export async function syncServerTime() {
+  try {
+    const before = Date.now()
+    const response = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' })
+    const header = response.headers.get('date')
+    if (!header) return
+    const server = new Date(header).getTime() + 500
+    const difference = server - (before + Date.now()) / 2
+    if (Number.isFinite(difference) && Math.abs(difference) > 2000) offset = difference
+  } catch {
+    // Sin conexión se sigue con el reloj del equipo.
+  }
+}
+
 /** Un solo reloj para toda la página. Cada componente se redibuja solo si su lectura cambia. */
 let now = Date.now()
 const listeners = new Set<() => void>()
@@ -9,15 +28,15 @@ let timer = 0
 function schedule() {
   // Se alinea con el cambio de segundo real, para que el reloj no vaya a saltos desiguales.
   timer = window.setTimeout(() => {
-    now = Date.now()
+    now = serverNow()
     listeners.forEach((listener) => listener())
     schedule()
-  }, 1000 - (Date.now() % 1000) + 4)
+  }, 1000 - (serverNow() % 1000) + 4)
 }
 
 function subscribe(listener: () => void) {
   if (listeners.size === 0) {
-    now = Date.now()
+    now = serverNow()
     schedule()
   }
   listeners.add(listener)

@@ -1,6 +1,8 @@
 import { animate, motionValue } from 'motion/react'
 import type { LaneId } from '../data/board'
 import { getState, setFocus } from '../store/board'
+import { serverNow } from './clock'
+import { localTime, scriptFor } from './script'
 
 /**
  * La cámara del tablero. Todo lo que está dentro del mundo (notas, cursores, notas en el aire)
@@ -156,30 +158,51 @@ export function markInput() {
 
 const HANDS_OFF_MS = 7000
 
+/** Los planos están en el guion: todas las pantallas miran lo mismo en el mismo momento. */
 export function startDirector() {
-  let holdUntil = 0
-  let following: string | null = null
-  let shots = 0
-  let lastWorked = ''
+  let current = -1
 
   const tick = () => {
     const now = performance.now()
-    const { cameraOn, working, cards, agents } = getState()
+    const { cameraOn, sprint, liveSprint } = getState()
     if (!cameraOn || document.hidden || now - lastInput < HANDS_OFF_MS) {
-      following = null
+      current = -1
       return
     }
-
-    // 1. Quien va a llevar una nota siempre gana. La cámara se adelanta: encuadra de dónde sale
-    //    y a dónde va en cuanto el agente lo decide, antes de que el cursor llegue a la nota.
-    const trips = Object.values(agents).flatMap((a) => (a.going ? [a.going] : []))
-    const trip = trips.find((t) => t.card === following) ?? trips[0]
-    if (trip && trip.card !== following) {
-      const stage = stageEl()
-      const lane = document.querySelector(`[data-lane="${trip.to}"]`)
-      const note = document.querySelector(`[data-card="${trip.card}"]`)
-      const card = cards.find((c) => c.id === trip.card)
-      if (stage && lane && note && card) {
+    if (sprint !== liveSprint) {
+      if (current !== -2) {
+        overview()
+        setFocus(null)
+        current = -2
+      }
+      return
+    }
+    const local = localTime(sprint, serverNow())
+    const { shots } = scriptFor(sprint)
+    let index = -1
+    for (let i = shots.length - 1; i >= 0; i--) {
+      if (shots[i].at <= local) {
+        index = i
+        break
+      }
+    }
+    if (index === current || index < 0) return
+    current = index
+    const shot = shots[index]
+    const stage = stageEl()
+    if (shot.kind === 'overview') {
+      overview()
+      setFocus(null)
+    } else if (shot.kind === 'close') {
+      const el = document.querySelector(`[data-card="${shot.card}"]`)
+      if (el) {
+        frame(worldRectOf(el), 1.22)
+        setFocus([shot.lane])
+      }
+    } else if (stage) {
+      const lane = document.querySelector(`[data-lane="${shot.to}"]`)
+      const note = document.querySelector(`[data-card="${shot.card}"]`)
+      if (lane && note) {
         const to = worldRectOf(lane)
         const from = worldRectOf(note)
         const left = Math.min(from.x, to.x)
@@ -187,39 +210,12 @@ export function startDirector() {
         const top = Math.min(from.y, to.y)
         const zoom = Math.max(0.6, Math.min(1.1, (viewWidth(stage) * 0.82) / (right - left)))
         frame({ x: left, y: top, w: right - left, h: 320 }, zoom)
-        setFocus([card.lane, trip.to])
-        following = trip.card
-        holdUntil = now + 1400
+        setFocus([shot.from, shot.to])
       }
-      return
-    }
-    if (trip) return
-    if (now < holdUntil) return
-    following = null
-
-    // 2. Cada tanto, un plano general para ver el flujo completo.
-    shots += 1
-    const busy = Object.entries(working).filter(([, id]) => id)
-    if (busy.length === 0 || shots % 6 === 0) {
-      overview()
-      setFocus(null)
-      holdUntil = now + 2400
-      return
-    }
-
-    // 3. Primer plano de alguien trabajando, turnándose entre personas.
-    const next = busy.find(([person]) => person !== lastWorked) ?? busy[0]
-    lastWorked = next[0]
-    const card = cards.find((c) => c.id === next[1])
-    const el = document.querySelector(`[data-card="${next[1]}"]`)
-    if (card && el) {
-      frame(worldRectOf(el), 1.22)
-      setFocus([card.lane])
-      holdUntil = now + 3000
     }
   }
 
-  const timer = window.setInterval(tick, 50)
+  const timer = window.setInterval(tick, 100)
   return () => {
     window.clearInterval(timer)
     setFocus(null)
