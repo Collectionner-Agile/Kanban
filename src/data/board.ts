@@ -58,6 +58,12 @@ export type Card = {
   seedProgress?: number
   area?: string
   note?: string
+  /** Historia y escenarios que cubre, tareas del DoD y cartillas de las que depende. */
+  hu?: string
+  dod?: { done: number; total: number }
+  depends?: string[]
+  /** Carriles que esta cartilla no pisa: lo solo de backend no pasa por diseño. */
+  skip?: LaneId[]
   /** Tiempo real: cuándo empezó, para cuándo estaba planificada y cuándo terminó. */
   planMs?: number
   startedAt?: number
@@ -70,64 +76,6 @@ export type Card = {
   pausedAt?: number
 }
 
-/**
- * Área y detalle de cada nota. El Sprint 1 sale del documento de contexto de Collectionner
- * (épicas E1 a E5 y E10, y lo que ya estaba hecho). El Sprint 2 es el entrenamiento del modelo propio.
- */
-const DETAILS: Record<string, [string, string]> = {
-  'Política de privacidad y términos': ['Lanzamiento', 'Dentro de la app, antes de publicar'],
-  'Keystore y publicación en Play Store': ['Lanzamiento', 'Firma de lanzamiento de la app'],
-  'Miniaturas para listas': ['Imágenes', 'Fotos livianas en el catálogo'],
-  'Límite de intentos de acceso': ['Cuentas', 'Login, registro y recuperación'],
-  'Proveedor de correo': ['Cuentas', 'Que salga el correo de recuperación'],
-  'Cierre automático de subastas': ['Subastas', 'Definir al ganador en el servidor'],
-  'Pujas en tiempo real': ['Subastas', 'WebSocket o sondeo corto'],
-  'Incremento mínimo y anti-sniping': ['Subastas', 'Reglas configurables'],
-  'Fotos en almacenamiento de objetos': ['Imágenes', 'URLs firmadas, ya no base64 en la base'],
-  'Prueba de pujas simultáneas': ['Subastas', 'Contra PostgreSQL, confirmar el 409'],
-  'Inicio de sesión con Google': ['Cuentas', 'Terminar y subir el código de la app'],
-  'Desplegar el backend': ['Backend', 'Contenedor con variables y secretos propios'],
-  'Apuntar la app al servidor real': ['Backend', 'Quitar el modo con datos de muestra'],
-  'Seed mínimo en Supabase': ['Backend', 'Categorías y cuentas de prueba'],
-  'Esquema de base en Supabase': ['Base de datos', 'Migraciones V1 a V6 aplicadas'],
-  'App móvil con más de 50 pantallas': ['App móvil', '85 pruebas automáticas pasan'],
-
-  'Definir las clases del modelo': ['Datos', 'Cartuchos, cartas TCG, relojes y Lego'],
-  'Reglas de consentimiento de fotos': ['Datos', 'Quién autoriza y cómo se guarda'],
-  'Mostrar correcciones del usuario': ['Escaneo', 'Para mejorar catálogo y modelo'],
-  'Meta de precisión por clase': ['Evaluación', 'Qué cifra se necesita para publicar'],
-  'Probar Gemini de punta a punta': ['Escaneo', 'Clave en el servidor, flujo en el teléfono'],
-  'Recolectar fotos con consentimiento': ['Datos', 'Hoy hay 0 clases y 0 imágenes'],
-  'Etiquetar y revisar fotos': ['Datos', 'Cada foto con su clase correcta'],
-  'Separar entrenamiento y prueba': ['Datos', 'Conjuntos sin fotos repetidas'],
-  'Entrenar el clasificador base': ['Modelo', 'Con la canalización de la carpeta ml/'],
-  'Aumento de datos': ['Modelo', 'Luz, ángulo y recorte como en el teléfono'],
-  'Medir precisión por clase': ['Evaluación', 'Con fotos reales que el modelo no vio'],
-  'Comparar contra Gemini': ['Evaluación', 'Mismas fotos, mismas reglas'],
-  'Ajustar umbrales de confianza': ['Escaneo', 'Hoy 0,40, 0,60 y margen de 0,15'],
-  'Servir el modelo en el backend': ['Escaneo', 'Dentro de /recognition/analyze'],
-  'Canalización ml/ reproducible': ['Modelo', 'Escrita y probada, falta darle datos'],
-}
-
-const detailsOf = (title: string): Pick<Card, 'area' | 'note'> => {
-  const found = DETAILS[title]
-  return found ? { area: found[0], note: found[1] } : {}
-}
-
-function seedOf(prefix: string, rows: Array<[string, PersonId, ServiceClass, LaneId, number, Partial<Card>?]>): Card[] {
-  return rows.map(([title, owner, cls, lane, points, extra], i) => ({
-    id: `${prefix}-${i + 1}`,
-    key: `${prefix}-${i + 1}`,
-    title,
-    owner,
-    cls,
-    lane,
-    points,
-    returns: 0,
-    ...detailsOf(title),
-    ...extra,
-  }))
-}
 
 export type Sprint = {
   id: SprintId
@@ -149,87 +97,80 @@ export const SPRINTS: Record<SprintId, Sprint> = {
     tag: 'MVP',
     prefix: 'MVP',
     color: '#EDEBE6',
-    dates: '24 de agosto al 11 de octubre, semanas 1 a 7',
-    goal: 'Collectionner en línea, con subastas confiables.',
+    dates: '2 al 13 de noviembre, semanas 11 y 12',
+    goal: 'Un MVP que cumpla el DoD completo.',
     lanes: [
-      { id: 'backlog', name: 'Backlog', wip: null, kind: 'queue', hint: 'Lo que falta para lanzar, sin compromiso todavía', stage: 'Descubrir' },
-      { id: 'analysis', name: 'Análisis', wip: 2, kind: 'work', hint: 'Entender qué hace falta y qué ya existe' },
-      { id: 'ux', name: 'Diseño UX', wip: 2, kind: 'work', hint: 'Flujos y pantallas' },
-      { id: 'prototype', name: 'Prototipo', wip: 2, kind: 'work', hint: 'Probar la idea antes de construirla' },
-      { id: 'ready', name: 'Listo para dev', wip: 3, kind: 'queue', hint: 'Compromiso: desde aquí se construye', stage: 'Construir' },
-      { id: 'dev', name: 'Desarrollo', wip: 3, kind: 'work', hint: 'Construcción' },
-      { id: 'review', name: 'Revisión', wip: 2, kind: 'check', hint: 'Revisión de código' },
-      { id: 'qa', name: 'Pruebas', wip: 2, kind: 'check', hint: 'Comprobar que funciona', stage: 'Entregar' },
-      { id: 'demo', name: 'Demo', wip: 1, kind: 'check', hint: 'Mostrarlo funcionando en un teléfono real' },
-      { id: 'mvp', name: 'MVP listo', wip: null, kind: 'end', hint: 'Entregado' },
+      { id: 'backlog', name: 'Backlog', wip: null, kind: 'queue', hint: 'Ordenado por el PO; sin asignar responsable', stage: 'Descubrir' },
+      { id: 'analysis', name: 'Análisis', wip: 1, kind: 'work', hint: 'Aclarar criterios con el PO' },
+      { id: 'ux', name: 'Diseño UX', wip: 1, kind: 'work', hint: 'Las cartillas solo de backend saltan esta columna' },
+      { id: 'prototype', name: 'Prototipo', wip: 1, kind: 'work', hint: 'Las cartillas solo de backend saltan esta columna' },
+      { id: 'ready', name: 'Listo para dev', wip: 3, kind: 'queue', hint: 'Cola de entrada a Desarrollo', stage: 'Construir' },
+      { id: 'dev', name: 'Desarrollo', wip: 3, kind: 'work', hint: 'Terminar antes de empezar' },
+      { id: 'review', name: 'Revisión', wip: 2, kind: 'check', hint: 'Revisión por pares obligatoria (DoD)' },
+      { id: 'qa', name: 'Pruebas', wip: 1, kind: 'check', hint: 'Pruebas automatizadas en verde', stage: 'Entregar' },
+      { id: 'demo', name: 'Demo', wip: 1, kind: 'check', hint: 'Despliegue en entorno de validación' },
+      { id: 'mvp', name: 'MVP listo', wip: null, kind: 'end', hint: 'Cumple el DoD completo' },
     ],
-    seed: seedOf('MVP', [
-      ['Política de privacidad y términos', 'diego', 'improve', 'backlog', 2],
-      ['Keystore y publicación en Play Store', 'luis', 'standard', 'backlog', 3],
-      ['Miniaturas para listas', 'brenda', 'standard', 'backlog', 2],
-      ['Límite de intentos de acceso', 'josediego', 'standard', 'analysis', 3, { seedProgress: 0.4 }],
-      ['Proveedor de correo', 'diego', 'date', 'analysis', 5, { due: '2 oct', seedProgress: 0.2 }],
-      ['Cierre automático de subastas', 'beth', 'standard', 'ux', 2, { seedProgress: 0.6 }],
-      ['Pujas en tiempo real', 'brenda', 'standard', 'ux', 5, { seedProgress: 0.3 }],
-      ['Incremento mínimo y anti-sniping', 'beth', 'improve', 'prototype', 3, { seedProgress: 0.5 }],
-      ['Fotos en almacenamiento de objetos', 'luis', 'standard', 'ready', 3],
-      ['Prueba de pujas simultáneas', 'luis', 'urgent', 'dev', 3, { seedProgress: 0.7 }],
-      ['Inicio de sesión con Google', 'josediego', 'standard', 'dev', 2, { seedProgress: 0.4 }],
-      ['Desplegar el backend', 'diego', 'date', 'review', 5, { due: '25 sep', seedProgress: 0.25 }],
-      ['Apuntar la app al servidor real', 'brenda', 'standard', 'qa', 3, { seedProgress: 0.35 }],
-      ['Seed mínimo en Supabase', 'beth', 'standard', 'demo', 5, { seedProgress: 0.6 }],
-      ['Esquema de base en Supabase', 'luis', 'standard', 'mvp', 2, { seedProgress: 1 }],
-      ['App móvil con más de 50 pantallas', 'josediego', 'standard', 'mvp', 1, { seedProgress: 1 }],
-    ]),
+    seed: [
+      { id: "MVP-01", key: "MVP-01", title: "Base de la app móvil", owner: "brenda", cls: "standard", lane: "backlog", points: 5, returns: 0, area: "Plataforma", note: "Arquitectura por módulos, navegación de 5 pestañas y cliente API con errores tipados", hu: "Habilitador", dod: {done: 4, total: 6}, skip: ["analysis","ux","prototype"] },
+      { id: "MVP-02", key: "MVP-02", title: "Sistema de diseño Slab", owner: "diego", cls: "standard", lane: "backlog", points: 5, returns: 0, area: "Diseño", note: "Tokens, tipografía Fraunces/Archivo, modo claro/oscuro e idioma es/en", hu: "RNF01", dod: {done: 5, total: 6}, skip: ["analysis","ux","prototype"] },
+      { id: "MVP-03", key: "MVP-03", title: "Registro e inicio de sesión", owner: "brenda", cls: "standard", lane: "review", points: 5, returns: 0, area: "Cuenta", note: "Crear cuenta, ingresar, recuperar contraseña y sesión segura", hu: "HU01 esc. 1–4", dod: {done: 3, total: 7}, seedProgress: 0.15 },
+      { id: "MVP-04", key: "MVP-04", title: "Gestión del perfil", owner: "beth", cls: "standard", lane: "dev", points: 3, returns: 0, area: "Cuenta", note: "Ver, editar, cambiar contraseña y eliminar cuenta", hu: "HU02 esc. 1–3", dod: {done: 3, total: 6}, seedProgress: 1 },
+      { id: "MVP-05", key: "MVP-05", title: "Catálogo y búsqueda", owner: "luis", cls: "standard", lane: "ready", points: 5, returns: 0, area: "Catálogo", note: "Categorías, búsqueda, filtros y orden de resultados", hu: "HU03 esc. 1–3", dod: {done: 3, total: 7} },
+      { id: "MVP-06", key: "MVP-06", title: "Detalle de pieza", owner: "diego", cls: "standard", lane: "ready", points: 3, returns: 0, area: "Catálogo", note: "Galería, visor con zoom, reseñas y comentarios", hu: "HU03", dod: {done: 3, total: 5} },
+      { id: "MVP-07", key: "MVP-07", title: "Publicar una pieza", owner: "luis", cls: "standard", lane: "dev", points: 5, returns: 0, area: "Publicación", note: "Ficha con hasta 5 fotos, sin datos EXIF", hu: "HU04 esc. 1–3", dod: {done: 4, total: 7}, seedProgress: 1 },
+      { id: "MVP-08", key: "MVP-08", title: "Subastas", owner: "josediego", cls: "standard", lane: "review", points: 8, returns: 0, area: "Subastas", note: "Listar, pujar, crear y cancelar con cuenta regresiva", hu: "HU06 esc. 1–4", dod: {done: 4, total: 7}, seedProgress: 0.4 },
+      { id: "MVP-09", key: "MVP-09", title: "Comunidades", owner: "beth", cls: "standard", lane: "ready", points: 8, returns: 0, area: "Comunidades", note: "Unirse, feed, publicaciones y comentarios", hu: "HU08 esc. 1–3", dod: {done: 3, total: 6} },
+      { id: "MVP-10", key: "MVP-10", title: "Reconocimiento por cámara", owner: "josediego", cls: "standard", lane: "dev", points: 8, returns: 0, area: "IA", note: "Identifica la pieza con Gemini y la empareja con el catálogo", hu: "Relacionada a HU11", dod: {done: 4, total: 6}, seedProgress: 1 },
+      { id: "MVP-11", key: "MVP-11", title: "Suite de pruebas", owner: "diego", cls: "standard", lane: "backlog", points: 5, returns: 0, area: "Calidad", note: "Pruebas unitarias, de widgets, de integración y matriz responsiva", hu: "DoD", dod: {done: 2, total: 4}, skip: ["analysis","ux","prototype"] },
+      { id: "MVP-12", key: "MVP-12", title: "Pantallas emergentes", owner: "brenda", cls: "standard", lane: "analysis", points: 1, returns: 0, area: "Alcance", note: "El PO decide si las ~20 pantallas fuera del informe se mantienen", hu: "Fuera del informe", dod: {done: 0, total: 3}, seedProgress: 0.3, skip: ["ux","prototype"] },
+    ],
     phrases: [
-      'Primero, poner Collectionner en línea.',
-      'De vuelta a lo que sí o sí tiene que salir.',
-      'Que se pueda pujar de verdad.',
-      'Menos alcance y más entrega.',
+      'Código terminado. Falta cumplir el DoD.',
+      'Revisión de dos en dos, según el orden.',
+      'Nada entra a MVP listo sin verificar.',
+      'Terminar antes de empezar.',
     ],
   },
   2: {
     id: 2,
     name: 'Sprint 2',
     tag: 'Incremento',
-    prefix: 'IA',
+    prefix: 'INC',
     color: '#0E0E10',
-    dates: '12 de octubre al 6 de diciembre, semanas 8 a 15',
-    goal: 'Entrenar la IA que reconoce cada pieza.',
+    dates: '16 al 27 de noviembre, semanas 13 y 14',
+    goal: 'Comprar, intercambiar y confiar en la plataforma.',
     lanes: [
-      { id: 'feedback', name: 'Backlog IA', wip: null, kind: 'queue', hint: 'Lo que falta para tener un modelo propio', stage: 'Datos' },
-      { id: 'ranked', name: 'Priorizado', wip: 3, kind: 'queue', hint: 'Ordenado por lo que más desbloquea' },
-      { id: 'refined', name: 'Datos', wip: 2, kind: 'work', hint: 'Reunir y etiquetar fotos con consentimiento' },
-      { id: 'planned', name: 'Listo para entrenar', wip: 3, kind: 'queue', hint: 'Compromiso: con datos suficientes entra a entrenamiento' },
-      { id: 'build', name: 'Entrenamiento', wip: 3, kind: 'work', hint: 'Entrenar y ajustar el modelo', stage: 'Entrenar' },
-      { id: 'integrate', name: 'Validación', wip: 2, kind: 'check', hint: 'Medir con fotos que no vio' },
-      { id: 'regress', name: 'Comparación', wip: 2, kind: 'check', hint: 'Frente a Gemini y las reglas actuales', stage: 'Publicar' },
-      { id: 'accept', name: 'Prueba real', wip: 2, kind: 'check', hint: 'En el teléfono, con fotos reales' },
-      { id: 'deploy', name: 'Despliegue', wip: 1, kind: 'check', hint: 'Sale una a la vez' },
-      { id: 'prod', name: 'En producción', wip: null, kind: 'end', hint: 'Reconociendo piezas en la app' },
+      { id: 'feedback', name: 'Backlog', wip: null, kind: 'queue', hint: 'Ordenado por el PO; sin asignar responsable', stage: 'Descubrir' },
+      { id: 'ranked', name: 'Análisis', wip: 1, kind: 'work', hint: 'Aclarar criterios con el PO' },
+      { id: 'refined', name: 'Diseño UX', wip: 1, kind: 'work', hint: 'Las cartillas solo de backend saltan esta columna' },
+      { id: 'planned', name: 'Prototipo', wip: 1, kind: 'work', hint: 'Las cartillas solo de backend saltan esta columna' },
+      { id: 'build', name: 'Listo para dev', wip: 3, kind: 'queue', hint: 'Cola de entrada a Desarrollo', stage: 'Construir' },
+      { id: 'integrate', name: 'Desarrollo', wip: 3, kind: 'work', hint: 'Terminar antes de empezar' },
+      { id: 'regress', name: 'Revisión', wip: 2, kind: 'check', hint: 'Revisión por pares obligatoria (DoD)' },
+      { id: 'accept', name: 'Pruebas', wip: 1, kind: 'check', hint: 'Pruebas automatizadas en verde', stage: 'Entregar' },
+      { id: 'deploy', name: 'Demo', wip: 1, kind: 'check', hint: 'Despliegue en entorno de validación' },
+      { id: 'prod', name: 'MVP listo', wip: null, kind: 'end', hint: 'Cumple el DoD completo' },
     ],
-    seed: seedOf('IA', [
-      ['Definir las clases del modelo', 'beth', 'standard', 'feedback', 3],
-      ['Reglas de consentimiento de fotos', 'luis', 'improve', 'feedback', 3],
-      ['Mostrar correcciones del usuario', 'brenda', 'improve', 'feedback', 2],
-      ['Meta de precisión por clase', 'diego', 'date', 'ranked', 5, { due: '5 dic' }],
-      ['Probar Gemini de punta a punta', 'josediego', 'standard', 'ranked', 3],
-      ['Recolectar fotos con consentimiento', 'brenda', 'standard', 'refined', 5, { seedProgress: 0.3 }],
-      ['Etiquetar y revisar fotos', 'luis', 'standard', 'refined', 2, { seedProgress: 0.65 }],
-      ['Separar entrenamiento y prueba', 'josediego', 'improve', 'planned', 2],
-      ['Entrenar el clasificador base', 'beth', 'improve', 'build', 3, { seedProgress: 0.5 }],
-      ['Aumento de datos', 'josediego', 'standard', 'build', 2, { seedProgress: 0.8 }],
-      ['Medir precisión por clase', 'diego', 'standard', 'integrate', 5, { seedProgress: 0.15 }],
-      ['Comparar contra Gemini', 'brenda', 'standard', 'regress', 3, { seedProgress: 0.45 }],
-      ['Ajustar umbrales de confianza', 'diego', 'date', 'accept', 3, { due: '20 nov', seedProgress: 0.3 }],
-      ['Servir el modelo en el backend', 'beth', 'date', 'deploy', 1, { due: '12 nov', seedProgress: 0.7 }],
-      ['Canalización ml/ reproducible', 'luis', 'standard', 'prod', 3, { seedProgress: 1 }],
-    ]),
+    seed: [
+      { id: "INC-01", key: "INC-01", title: "Categorías del informe", owner: "diego", cls: "urgent", lane: "feedback", points: 2, returns: 0, area: "Catálogo", note: "Alinear con TCG, Figuras/Funkos, Monedas, Cómics, Relojes y Retro", hu: "HU03", dod: {done: 0, total: 5}, skip: ["refined","planned"] },
+      { id: "INC-02", key: "INC-02", title: "Ingreso con Google", owner: "josediego", cls: "urgent", lane: "feedback", points: 3, returns: 0, area: "Cuenta", note: "Habilitar OAuth en el backend; el cliente ya existe", hu: "HU01", dod: {done: 0, total: 5}, skip: ["refined","planned"] },
+      { id: "INC-03", key: "INC-03", title: "API de compra", owner: "beth", cls: "date", lane: "feedback", points: 8, returns: 0, area: "Compras", note: "Crear operación, bloquear pieza vendida y evitar comprar la propia", hu: "HU05 esc. 1–3", dod: {done: 0, total: 6}, due: "20 nov", skip: ["refined","planned"] },
+      { id: "INC-04", key: "INC-04", title: "Comprar desde la app", owner: "brenda", cls: "date", lane: "feedback", points: 5, returns: 0, area: "Compras", note: "Botón Comprar, confirmación y estado visible a ambas partes", hu: "HU05", dod: {done: 0, total: 6}, due: "24 nov", depends: ["INC-03"] },
+      { id: "INC-05", key: "INC-05", title: "Cierre de la operación", owner: "brenda", cls: "date", lane: "feedback", points: 5, returns: 0, area: "Compras", note: "El vendedor confirma la entrega y el comprador la recepción; queda «completada»", hu: "HU05", dod: {done: 0, total: 6}, due: "24 nov", depends: ["INC-03"] },
+      { id: "INC-06", key: "INC-06", title: "API de intercambio", owner: "beth", cls: "standard", lane: "feedback", points: 8, returns: 0, area: "Intercambio", note: "Propuestas pendiente/aceptada/rechazada y control de pieza comprometida", hu: "HU07 esc. 1–3", dod: {done: 0, total: 6}, skip: ["refined","planned"] },
+      { id: "INC-07", key: "INC-07", title: "Intercambiar desde la app", owner: "diego", cls: "standard", lane: "feedback", points: 5, returns: 0, area: "Intercambio", note: "Proponer, aceptar o rechazar desde el detalle de la pieza", hu: "HU07", dod: {done: 0, total: 6}, depends: ["INC-06"] },
+      { id: "INC-08", key: "INC-08", title: "Valorar al usuario", owner: "luis", cls: "standard", lane: "feedback", points: 5, returns: 0, area: "Reputación", note: "Solo tras una operación completada, una por operación", hu: "HU09 esc. 1–3", dod: {done: 0, total: 6}, depends: ["INC-05"] },
+      { id: "INC-09", key: "INC-09", title: "Notificaciones push", owner: "diego", cls: "standard", lane: "feedback", points: 5, returns: 0, area: "Notificaciones", note: "Aviso de puja superada, compra e intercambio", hu: "HU10 esc. 1–3", dod: {done: 0, total: 7}, depends: ["INC-03","INC-06"], skip: ["refined","planned"] },
+      { id: "INC-10", key: "INC-10", title: "Prueba de usabilidad", owner: "luis", cls: "date", lane: "feedback", points: 5, returns: 0, area: "Validación", note: "Tareas de registro, búsqueda, publicación y compra; medir KPI de 2.7", hu: "OE2, OE3", dod: {done: 0, total: 5}, due: "26 nov", depends: ["INC-04","INC-05"] },
+      { id: "INC-11", key: "INC-11", title: "API de valorización", owner: "josediego", cls: "standard", lane: "feedback", points: 8, returns: 0, area: "IA", note: "5 fotos a Gemini, puntuación 10/8/6/4/2 no editable", hu: "HU11 esc. 2, 4, 5, Should", dod: {done: 0, total: 6}, skip: ["refined","planned"] },
+      { id: "INC-12", key: "INC-12", title: "Valorizar desde la app", owner: "diego", cls: "standard", lane: "feedback", points: 5, returns: 0, area: "IA", note: "Activar u omitir, requisitos de foto y distintivo", hu: "HU11 esc. 1, 3, Should", dod: {done: 0, total: 6}, depends: ["INC-11"] },
+    ],
     phrases: [
-      'Ya está el MVP. Ahora, a entrenar la IA.',
-      'Hoy hay 0 imágenes. Toca reunir las primeras.',
-      'Que el modelo aprenda a reconocer cada pieza.',
-      'Del dato al modelo en producción.',
+      'Ya está el MVP. Ahora, comprar e intercambiar.',
+      'Primero lo urgente, luego la cadena de compra.',
+      'En Kanban, la cartilla se asigna cuando alguien la jala.',
+      'La IA cierra el sprint, si la capacidad alcanza.',
     ],
   },
 }

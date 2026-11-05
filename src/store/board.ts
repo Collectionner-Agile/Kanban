@@ -29,7 +29,7 @@ export type Ghost = {
   airFace?: Face
 }
 
-export type AgentView = { label: string; pressed: boolean; ready: boolean }
+export type AgentView = { label: string; pressed: boolean; ready: boolean; card?: string }
 /** El mouse de una nota propia: va aparte del guion para no alterar lo que ven los demás. */
 export type LocalCursor = { id: string; owner: PersonId; label: string; pressed: boolean; x: MotionValue<number>; y: MotionValue<number> }
 export type ActivityKind = 'move' | 'back' | 'done' | 'full' | 'new' | 'tip'

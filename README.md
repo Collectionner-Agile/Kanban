@@ -2,7 +2,7 @@
 
 Tablero Kanban diseñado con STATIK. Solo diseño: los datos viven en memoria y no hay backend.
 
-Es el tablero de Collectionner, la plataforma de coleccionismo y subastas. Sprint 1 (MVP): lo que falta para lanzar. Sprint 2 (Incremento): entrenar la IA de deep learning que reconoce cada pieza.
+Es el tablero de Collectionner, con el backlog de backlog_kanban_collectioneer.xlsx. Sprint 1 (2 al 13 de noviembre): MVP, 61 puntos. Sprint 2 (16 al 27 de noviembre): compra, intercambio, reputación, notificaciones y valorización con IA, 64 puntos.
 
 ```bash
 npm install
@@ -37,3 +37,7 @@ Revisado con las skills Impeccable, frontend-design, web-design-guidelines, bett
 El sitio vive en Cloudflare Workers: https://statik-kanban.diegosotoquispe9876.workers.dev
 
 Para publicar cambios: `npm run deploy` (compila y sube `dist` con Wrangler). La primera vez en otro equipo hace falta `npx wrangler login`.
+
+## Medición y app móvil
+
+El botón Medición abre las gráficas de WIP, burndown, flujo y escenarios, y las actividades alineadas con [Collectionner-Agile/Mobile](https://github.com/Collectionner-Agile/Mobile). Los datos están en `src/data/backlog.ts` y `src/data/mobile.ts`.

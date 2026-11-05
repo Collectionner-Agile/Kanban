@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react'
 import { CLASSES, SPRINTS, type SprintId } from '../data/board'
 import { TEAM, type PersonId } from '../data/team'
 import { cam, frame, goToLane, markInput, overview, overviewScale, panBy, setCameraNow, startDirector, worldRectOf, zoomAt } from '../engine/camera'
+import { canFollowOutside, startFollowing, stopFollowing, useFollowingOutside } from '../engine/liveIsland'
 import { peekSprint } from '../engine/player'
 import { setCameraOn, useBoard } from '../store/board'
 import { NewNote } from './NewNote'
@@ -14,9 +15,11 @@ import { useClock } from '../engine/clock'
 import { localTime, presenceAt } from '../engine/script'
 import { HealthLegend, LaneAlarm } from './HealthBadge'
 import { StillFace } from './StillFace'
-import { Camera, Close, Plus, Question } from './icons'
+import { Camera, Chart, Close, Plus, Question } from './icons'
 import { Island } from './Island'
 import { Clock, Station } from './Station'
+
+const Metrics = lazy(() => import('./Metrics'))
 
 const SPRINT_IDS: SprintId[] = [1, 2]
 const DOT_STEP = 26
@@ -96,9 +99,9 @@ function Switch({ label, icon, on, onChange }: { label: string; icon: ReactNode;
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className="flex items-center gap-1 rounded-full py-1 pr-1 pl-1 text-[12.5px] font-medium text-soft transition-colors duration-150 hover:text-ink sm:gap-1.5 sm:pl-2"
+      className="flex items-center gap-1 rounded-full py-1 pr-1 pl-1 text-[12.5px] font-medium text-soft transition-colors duration-150 hover:text-ink max-[349px]:hidden sm:gap-1.5 sm:pl-2"
     >
-      <span className="sm:hidden">{icon}</span>
+      <span className="sm:hidden max-[389px]:hidden">{icon}</span>
       <span className="hidden sm:inline">{label}</span>
       <span className={`relative h-[18px] w-[30px] rounded-full transition-colors duration-200 ${on ? 'bg-ink' : 'bg-[var(--line-strong)]'}`}>
         <motion.i
@@ -109,6 +112,28 @@ function Switch({ label, icon, on, onChange }: { label: string; icon: ReactNode;
         />
       </span>
     </button>
+  )
+}
+
+/** Solo en iPhone con isla: deja el último movimiento en su reproductor al salir de la página. */
+function FollowOutside() {
+  const following = useFollowingOutside()
+  return (
+    <div className="mb-3 border-b border-line pb-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={following}
+        onClick={() => (following ? stopFollowing() : void startFollowing())}
+        className="flex w-full items-center justify-between gap-3 text-left text-[13.5px] font-medium"
+      >
+        Seguir en la isla al salir
+        <span className={`relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors duration-200 ${following ? 'bg-ink' : 'bg-[var(--line-strong)]'}`}>
+          <i className={`absolute top-[2px] left-[2px] block size-[14px] rounded-full bg-card transition-transform duration-200 ${following ? 'translate-x-3' : ''}`} />
+        </span>
+      </button>
+      <p className="mt-1 text-[12.5px] leading-[1.35] text-soft">Usa el reproductor del iPhone con audio en silencio, así que pausa tu música. Tócalo y mantén sobre la isla para leer el último movimiento.</p>
+    </div>
   )
 }
 
@@ -150,7 +175,7 @@ function Help() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            className="absolute top-full right-0 z-50 mt-2.5 w-[min(320px,calc(100vw-32px))] origin-top-right rounded-[18px] bg-card p-4 shadow-[var(--shadow-lift)]"
+            className="absolute top-full right-0 z-50 mt-2.5 max-h-[calc(100dvh-300px)] w-[min(320px,calc(100vw-32px))] origin-top-right overflow-y-auto rounded-[18px] bg-card p-4 shadow-[var(--shadow-lift)] sm:max-h-[calc(100dvh-90px)]"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Cómo usar el tablero</h2>
@@ -158,6 +183,11 @@ function Help() {
                 <Close size={12} />
               </button>
             </div>
+            {canFollowOutside && (
+              <div className="mt-3">
+                <FollowOutside />
+              </div>
+            )}
             <ul className="mt-2 space-y-1.5 text-[13px] leading-[1.4] text-soft">
               <li>
                 <b className="font-medium text-ink">WIP</b> es el máximo de notas por carril. Si está lleno, primero se termina una.
@@ -296,7 +326,7 @@ function Dock() {
 }
 
 /** El objetivo espera detrás de la frase y entra palabra por palabra cuando aparece el tablero. */
-function Goal({ text, dates, delivered, ready }: { text: string; dates: string; delivered: number; ready: boolean }) {
+function Goal({ text, dates, delivered, ready, stats }: { text: string; dates: string; delivered: number; ready: boolean; stats: { count: number; points: number; donePoints: number; endName: string; wipPerPerson: number } }) {
   const lite = useBoard((s) => s.lite)
   const words = text.replace(/\.$/, '').split(' ')
   return (
@@ -317,7 +347,10 @@ function Goal({ text, dates, delivered, ready }: { text: string; dates: string; 
         ))}
       </h2>
       <p className="mt-2 text-[15px] text-soft">
-        {dates}, {delivered} {delivered === 1 ? 'nota entregada' : 'notas entregadas'}
+        {dates}
+      </p>
+      <p data-sprint-stats className="mt-1 text-[14px] font-medium">
+        {stats.count} cartillas, {stats.points} puntos, {stats.donePoints} en {stats.endName}, {delivered} {delivered === 1 ? 'entregada' : 'entregadas'}, WIP activo {stats.wipPerPerson} por persona
       </p>
     </div>
   )
@@ -332,8 +365,21 @@ export function Board({ onReplay }: { onReplay: () => void }) {
   const sprint = SPRINTS[sprintId]
   const last = sprint.lanes[sprint.lanes.length - 1].id
   const delivered = cards.filter((c) => c.lane === last).length + archived
+  const stats = useMemo(() => {
+    const open = new Set(cards.filter((c) => c.lane !== last).map((c) => c.id))
+    const active = sprint.lanes.filter((l) => l.kind === 'work' || l.kind === 'check').reduce((n, l) => n + (l.wip ?? 0), 0)
+    return {
+      count: sprint.seed.length,
+      points: sprint.seed.reduce((n, c) => n + c.points, 0),
+      donePoints: sprint.seed.filter((c) => !open.has(c.id)).reduce((n, c) => n + c.points, 0),
+      endName: sprint.lanes[sprint.lanes.length - 1].name,
+      wipPerPerson: active / TEAM.length,
+    }
+  }, [cards, last, sprint])
   const inCloseUp = useBoard((s) => s.focus !== null)
   const [creating, setCreating] = useState(false)
+  const [measuring, setMeasuring] = useState(false)
+  const [measuredOnce, setMeasuredOnce] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const dotX = useTransform(cam.x, (v) => ((v % DOT_STEP) + DOT_STEP) % DOT_STEP - DOT_STEP)
   const dotY = useTransform(cam.y, (v) => ((v % DOT_STEP) + DOT_STEP) % DOT_STEP - DOT_STEP)
@@ -424,7 +470,7 @@ export function Board({ onReplay }: { onReplay: () => void }) {
           style={{ x: cam.x, y: cam.y, scale: cam.scale }}
         >
           <div className="flex flex-col gap-3 pb-6 pl-2 transition-opacity duration-300 sm:flex-row sm:items-end sm:gap-12" style={{ opacity: inCloseUp ? 0 : 1 }}>
-            <Goal text={sprint.goal} dates={sprint.dates} delivered={delivered} ready={scene !== 'shaft'} />
+            <Goal text={sprint.goal} dates={sprint.dates} delivered={delivered} ready={scene !== 'shaft'} stats={stats} />
             <div className="hidden sm:block">
               <FlowChart />
             </div>
@@ -440,9 +486,9 @@ export function Board({ onReplay }: { onReplay: () => void }) {
       </div>
 
       {/* Controles flotantes: no se mueven con la cámara. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
+      <div className="controls-top pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 px-3 sm:px-4">
         <div className="float pointer-events-auto flex items-center gap-1 rounded-full p-1">
-          <button type="button" onClick={onReplay} aria-label="Collectionner. Repetir la entrada" className="rounded-full px-2.5 py-1 text-[14px] font-semibold tracking-[-0.02em]" translate="no">
+          <button type="button" onClick={onReplay} aria-label="Collectionner. Repetir la entrada" className="rounded-full px-2.5 py-1 text-[14px] font-semibold tracking-[-0.02em] max-[389px]:hidden" translate="no">
             <span className="hidden sm:inline">Collectionner</span>
             <span className="sm:hidden">C</span>
           </button>
@@ -453,6 +499,19 @@ export function Board({ onReplay }: { onReplay: () => void }) {
             <Clock showDay />
           </span>
           <Switch label="Cámara" icon={<Camera size={14} />} on={cameraOn} onChange={setCameraOn} />
+          <button
+            type="button"
+            aria-label="Medición del sprint"
+            title="Medición del sprint"
+            onClick={() => {
+              setMeasuredOnce(true)
+              setMeasuring(true)
+            }}
+            className="flex h-7 items-center gap-1.5 rounded-full px-1.5 text-[12.5px] font-medium text-soft transition-colors duration-150 hover:bg-lane hover:text-ink sm:px-2 pointer-coarse:h-9"
+          >
+            <Chart size={14} />
+            <span className="hidden sm:inline">Medición</span>
+          </button>
           <button
             type="button"
             aria-label="Nueva nota"
@@ -468,8 +527,13 @@ export function Board({ onReplay }: { onReplay: () => void }) {
 
       <Island />
       <NewNote open={creating} onClose={() => setCreating(false)} />
+      {measuredOnce && (
+        <Suspense fallback={null}>
+          <Metrics open={measuring} onClose={() => setMeasuring(false)} />
+        </Suspense>
+      )}
 
-      <div data-dock className="pointer-events-none absolute inset-x-0 bottom-0 z-30 mx-auto max-w-[1180px] px-3 pb-3 sm:px-4 sm:pb-4">
+      <div data-dock className="pointer-events-none absolute inset-x-0 bottom-0 z-30 mx-auto dock-bottom max-w-[1180px] px-3 sm:px-4">
         <Station />
         <Dock />
       </div>

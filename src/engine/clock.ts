@@ -83,7 +83,7 @@ export function spanText(ms: number) {
 export type TimeStatus = 'waiting' | 'ok' | 'risk' | 'late' | 'ontime' | 'overtime'
 
 /** Lo planificado para una nota: un tramo base y un tanto por cada punto de esfuerzo. */
-export const planFor = (points: number) => 180_000 + points * 40_000
+export const planFor = (points: number) => 130_000 + points * 25_000
 
 export function statusOf(card: Card, at: number): TimeStatus {
   if (!card.startedAt || !card.dueAt) return 'waiting'

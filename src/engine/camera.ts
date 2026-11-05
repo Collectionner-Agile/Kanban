@@ -1,5 +1,6 @@
 import { animate, motionValue } from 'motion/react'
 import type { LaneId } from '../data/board'
+import { HARDWARE_ISLAND } from './device'
 import { getState, setFocus } from '../store/board'
 import { serverNow } from './clock'
 import { localTime, scriptFor } from './script'
@@ -85,7 +86,7 @@ export function frame(rect: { x: number; y: number; w: number; h: number }, zoom
   const stage = stageEl()
   if (!stage) return
   const x = viewWidth(stage) / 2 - (rect.x + rect.w / 2) * zoom
-  const y = viewHeight(stage) * 0.46 - (rect.y + rect.h / 2) * zoom
+  const y = viewHeight(stage) * (HARDWARE_ISLAND && stage.clientWidth < stage.clientHeight ? 0.52 : 0.46) - (rect.y + rect.h / 2) * zoom
   flyCamera(x, y, zoom, seconds)
 }
 
@@ -158,10 +159,12 @@ export function markInput() {
 
 const HANDS_OFF_MS = 7000
 const PHONE_WIDTH = 700
+const PHONE_ZOOM = 0.9
 
 /** Los planos están en el guion: todas las pantallas miran lo mismo en el mismo momento. */
 export function startDirector() {
   let current = -1
+  let wasPhone = false
 
   const tick = () => {
     const now = performance.now()
@@ -179,7 +182,14 @@ export function startDirector() {
       return
     }
     const local = localTime(sprint, serverNow())
-    const { shots } = scriptFor(sprint)
+    const stage = stageEl()
+    const phone = !!stage && stage.clientWidth < PHONE_WIDTH
+    const script = scriptFor(sprint)
+    const shots = phone ? script.phoneShots : script.shots
+    if (phone !== wasPhone) {
+      wasPhone = phone
+      current = -1
+    }
     let index = -1
     for (let i = shots.length - 1; i >= 0; i--) {
       if (shots[i].at <= local) {
@@ -190,28 +200,28 @@ export function startDirector() {
     if (index === current || index < 0) return
     current = index
     const shot = shots[index]
-    const stage = stageEl()
     if (shot.kind === 'overview') {
-      if (stage && stage.clientWidth < PHONE_WIDTH) {
-        // En el teléfono no cabe el plano general y mandaría al inicio del tablero:
-        // la cámara se queda con la última nota que estaba siguiendo, en el carril donde quedó.
-        const previous = shots.slice(0, index).reverse().find((x) => x.kind !== 'overview')
-        const id = previous && 'card' in previous ? previous.card : null
-        const el = id ? document.querySelector(`[data-card="${id}"]`) : null
-        const card = id ? getState().cards.find((c) => c.id === id) : null
-        if (el && card) {
-          frame(worldRectOf(el), 1)
-          setFocus([card.lane])
-        }
-      } else {
-        overview()
-        setFocus(null)
-      }
+      overview()
+      setFocus(null)
     } else if (shot.kind === 'close') {
       const el = document.querySelector(`[data-card="${shot.card}"]`)
       if (el) {
-        frame(worldRectOf(el), 1.22)
+        // En el teléfono, siempre a la misma escala: la nota se queda donde cayó, sin saltos de zoom.
+        frame(worldRectOf(el), phone ? PHONE_ZOOM : 1.22, phone ? 0.8 : undefined)
         setFocus([shot.lane])
+      }
+    } else if (shot.kind === 'follow') {
+      const lane = document.querySelector(`[data-lane="${shot.to}"]`)
+      const note = document.querySelector(`[data-card="${shot.card}"]`)
+      if (lane && note) {
+        const to = worldRectOf(lane)
+        const from = worldRectOf(note)
+        // Apunta a donde va a caer, no a donde estaba: así al soltarla la cámara ya no tiene que subir ni bajar.
+        const inLane = [...lane.querySelectorAll('[data-card]')].filter((c) => (c as HTMLElement).dataset.card !== shot.card)
+        const below = inLane.length ? worldRectOf(inLane[inLane.length - 1]) : null
+        const landing = below ? below.y + below.h + 10 : to.y + 56
+        frame({ x: to.x, y: landing, w: to.w, h: from.h }, PHONE_ZOOM, Math.max(0.8, shot.ms / 1000))
+        setFocus([shot.from, shot.to])
       }
     } else if (stage) {
       const lane = document.querySelector(`[data-lane="${shot.to}"]`)

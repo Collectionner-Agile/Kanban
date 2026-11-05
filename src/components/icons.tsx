@@ -30,6 +30,12 @@ export const Check = ({ size = 14, className }: IconProps) => (
   </svg>
 )
 
+export const Chart = ({ size = 14, className }: IconProps) => (
+  <svg {...base(size)} className={className}>
+    <path d="M3 13V8M8 13V3M13 13V6" />
+  </svg>
+)
+
 export const Plus = ({ size = 14, className }: IconProps) => (
   <svg {...base(size)} className={className}>
     <path d="M8 3v10M3 8h10" />

@@ -71,4 +71,30 @@ Geist en todo. Titulares con espaciado -0.035em.
 
 ## Contenido
 
-- Las notas del Sprint 1 salen del documento de contexto de Collectionner: lo que falta para lanzar (épicas E1, E2, E4, E5 y E10) y dos cosas ya hechas. El Sprint 2 es el entrenamiento de la IA: datos, entrenamiento, validación, comparación con Gemini y despliegue.
+- Las cartillas, carriles, WIP, responsables, clases de servicio, fechas y dependencias salen de backlog_kanban_collectioneer.xlsx: Sprint 1, 12 cartillas y 61 puntos; Sprint 2, 12 cartillas y 64 puntos.
+- El Excel deja 11 cartillas en Revisión con límite 2 y pide que entren de dos en dos según su orden. El tablero respeta el WIP: dos en Revisión, tres en Desarrollo con el código terminado, tres en Listo para dev y las últimas tres esperando en Backlog.
+- Una cartilla con dependencia no sale del Backlog hasta que aquella tenga el código terminado. En el Sprint 2 la "Afinidad sugerida" se usa como responsable para mover las notas.
+- Saltos de carril: lo solo de backend no pasa por Diseño UX ni Prototipo, y lo del Sprint 1 con código terminado entra directo a Listo para dev.
+
+## Medición
+
+- El panel Medición carga aparte y solo al abrirlo. Reúne los seis pasos de STATIK, WIP por columna, WIP activo, burndown, flujo acumulado, escenarios Gherkin y actividades de la app móvil.
+- Las gráficas salen del guion, así que todas las pantallas ven lo mismo. 6 minutos representan los 10 días hábiles del sprint. Las actividades son el estado real del Excel, del repositorio Mobile y de la doc, y no se mueven con la función.
+- Los colores de clase de servicio están en `--viz-urgent`, `--viz-date` y `--viz-standard`, validados con el validador de paleta en claro y oscuro. Los estados rojo, ámbar, azul y verde quedan reservados para estados.
+
+## Cámara en el teléfono
+
+- El teléfono tiene sus propios planos (`phoneShots`). Al soltar una nota la cámara se queda con ella 6,5 segundos y luego pasa a lo más cercano, hasta 2 carriles de distancia.
+- Solo va más lejos si no hay nada cerca: 13 segundos después si es hacia adelante, 26 si es hacia atrás.
+
+## Reglas de movimiento
+
+- Una cartilla en un carril activo llega al 100 %, se queda 0,9 segundos así y recién entonces se puede tomar.
+- Lo que hace la mano se lee en una fila reservada de la cartilla. La etiqueta de la mano solo lleva el nombre mientras va en camino.
+
+## iPhone con Dynamic Island
+
+- La web no puede escribir dentro de la isla: eso requiere app nativa con Live Activities. Aquí el aviso nace de su posición y su tamaño, y crece debajo del sensor.
+- Instalada en la pantalla de inicio la página llega al sensor y se ve unida. En Safari empieza debajo de la barra de estado, así que queda justo debajo.
+- Sin isla, o en horizontal, todo sigue como antes. Para probar: `?isla=iphone`, `?isla=app`, `?isla=no`.
+- Al salir de la página, una web solo puede dejar en la isla su reproductor. El interruptor "Seguir en la isla al salir" lo activa con un toque: audio en silencio y, como título, el último movimiento del guion. Pausa la música de quien lo activa y por eso nunca arranca solo.

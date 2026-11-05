@@ -130,7 +130,7 @@ function grab(person: PersonId, card: string, to: LaneId) {
 function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) {
   const showing = getState().agentsOn
   if (!seg) {
-    setAgent(person, { label: 'disponible', pressed: false })
+    setAgent(person, { label: 'disponible', pressed: false, card: undefined })
     setWorkingOf(person, null)
     return
   }
@@ -140,7 +140,7 @@ function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) 
   // Sigue en ámbar mientras espera lugar, aunque entre intentos descanse un momento.
   setBlocked(person, seg.type === 'wait' || seg.stay ? (seg.card as string) : null)
   if (seg.type !== 'rest' || !settling.has(person)) {
-    setAgent(person, { label: seg.label ?? '', pressed: seg.type === 'grip' || seg.type === 'lift' || seg.type === 'haul' || seg.type === 'drop' })
+    setAgent(person, { card: seg.card, label: seg.label ?? '', pressed: seg.type === 'grip' || seg.type === 'lift' || seg.type === 'haul' || seg.type === 'drop' })
   }
   if (!showing) return
   if (seg.type === 'work') drifted.set(person, serverNow() + 1400)
@@ -219,7 +219,7 @@ async function landed(land: Land) {
   if (!ghost || !hold) {
     detach(land.who)
     if (ghost) await settle(ghost, cardRect(land.card), PLACE_SECONDS)
-    setAgent(land.who, { pressed: false, label: 'disponible' })
+    setAgent(land.who, { pressed: false, label: 'disponible', card: undefined })
     if (!stopped) react(land.card, land.kind === 'done' ? 'done' : land.kind === 'back' ? 'down' : 'up')
     return
   }
@@ -244,7 +244,7 @@ async function landed(land: Land) {
   await settle(ghost, rect, PLACE_SECONDS)
   settling.delete(land.who)
   if (stopped) return
-  setAgent(land.who, { pressed: false, label: 'disponible' })
+  setAgent(land.who, { pressed: false, label: 'disponible', card: undefined })
   react(land.card, land.kind === 'done' ? 'done' : land.kind === 'back' ? 'down' : 'up')
   await new Promise((resolve) => window.setTimeout(resolve, 120))
   if (stopped) return
@@ -423,6 +423,8 @@ function tick() {
       applied.set(p.id, index)
       enter(p.id, seg, local, false)
     }
+    // El aro nunca se queda corto: si la nota ya se mueve, muestra lo que de verdad lleva.
+    if (seg?.card && seg.type !== 'work' && script.slices.has(seg.card)) progressOf(seg.card).set(progressAt(sprint, seg.card, local))
     if (seg?.type === 'work' && seg.card) {
       const progress = progressOf(seg.card)
       progress.set(Math.min(1, progressAt(sprint, seg.card, local)))

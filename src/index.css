@@ -41,6 +41,9 @@ html[data-sprint="1"] {
   --state-regular: #b45309;
   --state-critical: #dc2626;
   --state-waiting: #78716c;
+  --viz-urgent: #eb6834;
+  --viz-date: #6250d6;
+  --viz-standard: #1baf7a;
   --shadow-card: 0 0 0 1px rgb(17 17 17 / 0.05), 0 1px 1px rgb(17 17 17 / 0.04), 0 10px 22px -14px rgb(17 17 17 / 0.25);
   --shadow-lift: 0 0 0 1px rgb(17 17 17 / 0.06), 0 26px 44px -14px rgb(17 17 17 / 0.4);
   --shadow-float: 0 0 0 1px rgb(17 17 17 / 0.07), 0 10px 30px -10px rgb(17 17 17 / 0.28);
@@ -67,6 +70,9 @@ html[data-sprint="2"] {
   --state-regular: #fbbf24;
   --state-critical: #f87171;
   --state-waiting: #a8a29e;
+  --viz-urgent: #d95926;
+  --viz-date: #9085e9;
+  --viz-standard: #199e70;
   --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 10px 22px -14px rgb(0 0 0 / 0.8);
   --shadow-lift: 0 0 0 1px rgb(255 255 255 / 0.1), 0 26px 44px -14px rgb(0 0 0 / 0.9);
   --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.09), 0 10px 30px -10px rgb(0 0 0 / 0.8);
@@ -141,6 +147,30 @@ body.is-panning * {
 }
 
 /* La isla es hardware: siempre negra, de día y de noche. */
+/* Los controles respetan la zona del sensor y la barra de inicio. */
+.controls-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+.dock-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .controls-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+  .dock-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+@media (orientation: portrait) {
+  html[data-hw-island="browser"] .controls-top {
+    padding-top: 74px;
+  }
+  html[data-hw-island="app"] .controls-top {
+    padding-top: 116px;
+  }
+}
+
 .island {
   contain: layout paint;
   background: var(--island);

@@ -17,6 +17,9 @@ const CLOSE_LATEST_MS = 344_000
 const EPOCH = Date.UTC(2026, 0, 1)
 const SEED: Record<SprintId, number> = { 1: 20260824, 2: 20261012 }
 const DONE_VISIBLE = 6
+const FULL_HOLD_MS = 900
+/** Días hábiles que representa cada sprint, como en el burndown del Excel. */
+export const SPRINT_DAYS = 10
 
 export function clockAt(now: number) {
   const loop = Math.floor((now - EPOCH) / LOOP_MS)
@@ -59,7 +62,7 @@ export type ScriptEvent = {
 }
 export type AlertItem = { event: number; joinAt: number }
 export type AlertSlot = { at: number; until: number; items: AlertItem[] }
-export type Shot = { at: number; kind: 'trip'; card: string; to: LaneId; from: LaneId } | { at: number; kind: 'overview' } | { at: number; kind: 'close'; card: string; lane: LaneId }
+export type Shot = { at: number; kind: 'trip'; card: string; to: LaneId; from: LaneId } | { at: number; kind: 'overview' } | { at: number; kind: 'close'; card: string; lane: LaneId } | { at: number; kind: 'follow'; card: string; to: LaneId; from: LaneId; ms: number }
 type Slice = { t0: number; t1: number; p0: number; p1: number }
 
 const VERB: Partial<Record<LaneId, string>> = {
@@ -70,12 +73,13 @@ const VERB: Partial<Record<LaneId, string>> = {
   review: 'pasa revisión',
   qa: 'prueba',
   demo: 'presenta',
-  refined: 'prepara datos',
-  build: 'entrena',
-  integrate: 'valida',
-  regress: 'compara',
+  ranked: 'analiza',
+  refined: 'diseña',
+  planned: 'prototipa',
+  integrate: 'desarrolla',
+  regress: 'pasa revisión',
   accept: 'prueba',
-  deploy: 'despliega',
+  deploy: 'presenta',
 }
 
 function randomFrom(seed: number) {
@@ -135,6 +139,16 @@ function simulate(sprint: SprintId, scale: number) {
     const limit = LANE[lane].wip
     return limit === null || count(lane) + (reserved.get(lane) ?? 0) < limit
   }
+  /** Lo que depende de otra cartilla espera a que esa ya tenga su código terminado. */
+  const reviewAt = lanes.findIndex((l) => l.kind === 'check')
+  const dependenciesReady = (id: string) => (seeds.find((x) => x.id === id)?.depends ?? []).every((dep) => LANE_INDEX[laneOf.get(dep) as LaneId] >= reviewAt)
+  const skips = new Map(seeds.map((c) => [c.id, c.skip ?? []]))
+  /** El siguiente carril de esta cartilla, sin pisar los que salta. */
+  const nextFor = (id: string, lane: LaneId) => {
+    let next = NEXT[lane]
+    while (next && skips.get(id)?.includes(next)) next = NEXT[next]
+    return next
+  }
   const push = (who: PersonId, seg: Seg) => segs[who].push(seg)
   const slice = (id: string, s: Slice) => slices.set(id, [...(slices.get(id) ?? []), s])
 
@@ -168,12 +182,12 @@ function simulate(sprint: SprintId, scale: number) {
     step('seek', travel(p.at, LANE_INDEX[from]), false)
     step('grip', 300, true)
     step('lift', 320, true)
-    step('haul', Math.min(4000, 1500 + Math.abs(LANE_INDEX[to] - LANE_INDEX[from]) * 800) + between(0, 500), true)
+    step('haul', Math.min(4000, 1150 + Math.abs(LANE_INDEX[to] - LANE_INDEX[from]) * 650) + between(0, 350), true)
     p.at = LANE_INDEX[to]
     step('drop', 200, true)
     queued.push({ at: t, who: p.id, card: id, from, to, kind: LANE[to].kind === 'end' ? 'done' : back ? 'back' : 'move' })
     if (back) returns.set(id, (returns.get(id) ?? 0) + 1)
-    const gap = between(1300, 2300)
+    const gap = between(800, 1300)
     push(p.id, { t0: t, t1: t + gap, type: 'rest', label: 'disponible' })
     p.t = t + gap
     p.after = null
@@ -189,11 +203,11 @@ function simulate(sprint: SprintId, scale: number) {
       const id = p.after
       const lane = laneOf.get(id) as LaneId
       const rework = LANE[lane].kind === 'check' ? reworkLane(lane) : null
-      if (rework && rng() < 0.18 && (returns.get(id) ?? 0) < 2 && hasRoom(rework)) {
+      if (rework && rng() < 0.1 && (returns.get(id) ?? 0) < 2 && hasRoom(rework)) {
         carry(p, id, rework, 'regresa a')
         continue
       }
-      const next = NEXT[lane]
+      const next = nextFor(id, lane)
       if (!next) {
         p.after = null
         continue
@@ -229,10 +243,11 @@ function simulate(sprint: SprintId, scale: number) {
       const fly = travel(p.at, LANE_INDEX[lane.id])
       p.at = LANE_INDEX[lane.id]
       push(p.id, { t0: p.t, t1: p.t + fly, type: 'seek', card: id, lane: lane.id, label: '' })
-      push(p.id, { t0: p.t + fly, t1: p.t + fly + ms, type: 'work', card: id, lane: lane.id, label: VERB[lane.id] ?? 'trabaja' })
+      // Llega al 100 %, se queda un momento así, y recién entonces se puede mover.
+      push(p.id, { t0: p.t + fly, t1: p.t + fly + ms + FULL_HOLD_MS, type: 'work', card: id, lane: lane.id, label: VERB[lane.id] ?? 'trabaja' })
       slice(id, { t0: p.t + fly, t1: p.t + fly + ms, p0: done, p1: 1 })
       progress.set(id, 1)
-      p.t += fly + ms
+      p.t += fly + ms + FULL_HOLD_MS
       p.after = id
       acted = true
       break
@@ -240,9 +255,9 @@ function simulate(sprint: SprintId, scale: number) {
     if (acted) continue
 
     for (const lane of rightToLeft.filter((l) => l.kind === 'queue')) {
-      const next = NEXT[lane.id]
-      const id = mine.find((c) => laneOf.get(c) === lane.id)
-      if (!id || !next || !hasRoom(next)) continue
+      const id = mine.find((c) => laneOf.get(c) === lane.id && dependenciesReady(c) && hasRoom(nextFor(c, lane.id) as LaneId))
+      const next = id ? nextFor(id, lane.id) : undefined
+      if (!id || !next) continue
       carry(p, id, next, 'lleva a')
       acted = true
       break
@@ -266,7 +281,7 @@ function simulate(sprint: SprintId, scale: number) {
 function bestRun(sprint: SprintId) {
   let best: ReturnType<typeof simulate> | null = null
   let bestGap = Infinity
-  for (let scale = 0.4; scale <= 2.4; scale += 0.04) {
+  for (let scale = 0.22; scale <= 2.4; scale += 0.02) {
     const run = simulate(sprint, scale)
     if (!run.finished || run.closeAt > CLOSE_LATEST_MS) continue
     const gap = Math.abs(run.closeAt - CLOSE_TARGET_MS)
@@ -275,7 +290,7 @@ function bestRun(sprint: SprintId) {
       bestGap = gap
     }
   }
-  return best ?? simulate(sprint, 0.4)
+  return best ?? simulate(sprint, 0.22)
 }
 
 /* ---------- Estados ya calculados: cada aterrizaje comparte las notas que no cambiaron ---------- */
@@ -424,6 +439,79 @@ function buildShots(segs: Record<PersonId, Seg[]>) {
   return shots
 }
 
+/**
+ * El teléfono ve un carril a la vez. Al soltar una nota la cámara se queda con ella, y luego pasa
+ * a lo más cercano: nunca salta al inicio del tablero por lo que otra persona esté tomando allá.
+ */
+const SETTLE_MS = 450
+const STAY_AFTER_DROP_MS = 6500
+const NEAR_LANES = 2
+const FAR_AHEAD_AFTER_MS = 13_000
+const FAR_BEHIND_AFTER_MS = 26_000
+
+function buildPhoneShots(sprint: SprintId, segs: Record<PersonId, Seg[]>) {
+  const shots: Shot[] = []
+  const pointers = new Map(TEAM.map((p) => [p.id, 0]))
+  const segAt = (id: PersonId, t: number) => {
+    const list = segs[id]
+    let i = pointers.get(id) ?? 0
+    while (i < list.length && list[i].t1 <= t) i += 1
+    pointers.set(id, i)
+    const seg = list[i]
+    return seg && seg.t0 <= t ? seg : null
+  }
+  const home = SPRINTS[sprint].seed.reduce((best, c) => (LANE[c.lane].kind !== 'end' && LANE_INDEX[c.lane] > best ? LANE_INDEX[c.lane] : best), 0)
+  let at = home
+  let following: { card: string; to: LaneId; hauling: boolean } | null = null
+  let holdUntil = 0
+  let settled = 0
+  for (let t = 0; t < LIVE_MS; t += 100) {
+    const active = TEAM.map((p) => segAt(p.id, t))
+    const carried = active.flatMap((seg) => (seg?.carry && seg.card && seg.to && seg.lane ? [{ card: seg.card, to: seg.to, from: seg.lane }] : []))
+    if (following) {
+      const stillGoing = carried.some((x) => x.card === following?.card)
+      if (stillGoing) {
+        // La nota sale: la cámara viaja con ella, al mismo tiempo, hasta su carril.
+        const haul = active.find((seg) => seg?.type === 'haul' && seg.card === following?.card)
+        if (haul && !following.hauling) {
+          following.hauling = true
+          shots.push({ at: t, kind: 'follow', card: following.card, to: following.to, from: haul.lane as LaneId, ms: haul.t1 - t })
+        }
+        continue
+      }
+      // La soltó: la cámara se queda con la nota, ya en su lugar.
+      at = LANE_INDEX[following.to]
+      shots.push({ at: t + SETTLE_MS, kind: 'close', card: following.card, lane: following.to })
+      following = null
+      settled = t
+      holdUntil = t + STAY_AFTER_DROP_MS
+      continue
+    }
+    if (t < holdUntil) continue
+    const worked = active.flatMap((seg) => (seg?.type === 'work' && seg.card && seg.lane ? [{ card: seg.card, lane: seg.lane }] : []))
+    const near = (lane: LaneId) => Math.abs(LANE_INDEX[lane] - at)
+    const allowed = (lane: LaneId) => {
+      const distance = LANE_INDEX[lane] - at
+      if (Math.abs(distance) <= NEAR_LANES) return true
+      return t - settled >= (distance > 0 ? FAR_AHEAD_AFTER_MS : FAR_BEHIND_AFTER_MS)
+    }
+    const trip = carried.filter((x) => allowed(x.from)).sort((a, b) => near(a.from) - near(b.from))[0]
+    if (trip) {
+      if (LANE_INDEX[trip.from] !== at) shots.push({ at: t, kind: 'close', card: trip.card, lane: trip.from })
+      following = { card: trip.card, to: trip.to, hauling: false }
+      continue
+    }
+    const work = worked.filter((x) => allowed(x.lane)).sort((a, b) => near(a.lane) - near(b.lane))[0]
+    if (work && LANE_INDEX[work.lane] !== at) {
+      shots.push({ at: t, kind: 'close', card: work.card, lane: work.lane })
+      at = LANE_INDEX[work.lane]
+      settled = t
+      holdUntil = t + STAY_AFTER_DROP_MS
+    }
+  }
+  return shots
+}
+
 /** Los lugares por los que pasa cada persona, en orden. Sin idas y vueltas por estar buscando una nota. */
 const MIN_STAY_MS = 6000
 
@@ -468,7 +556,7 @@ function build(sprint: SprintId) {
     ...run.fulls.map((f) => ({ at: f.at, who: f.who, owner: f.who, kind: 'full' as const, card: f.card, title: titleOf(f.card)?.title ?? '', from: f.from, to: f.to })),
   ].sort((a, b) => a.at - b.at)
   const { slots, shownAt } = buildAlerts(events)
-  return { sprint, presence: buildPresence(sprint, run.segs), segs: run.segs, lands: run.lands, slices: run.slices, closeAt: run.closeAt, states, events, alerts: slots, shownAt, shots: buildShots(run.segs), flow: buildFlow(sprint, states, run.lands) }
+  return { sprint, presence: buildPresence(sprint, run.segs), segs: run.segs, lands: run.lands, slices: run.slices, closeAt: run.closeAt, states, events, alerts: slots, shownAt, shots: buildShots(run.segs), phoneShots: buildPhoneShots(sprint, run.segs), flow: buildFlow(sprint, states, run.lands), meter: buildMeter(sprint, states, run.lands) }
 }
 
 /** Diagrama de flujo acumulado, ya calculado cada 4 segundos del sprint. */
@@ -488,6 +576,27 @@ function buildFlow(sprint: SprintId, states: Array<{ cards: Card[]; archived: nu
     const { cards, archived } = states[index]
     const inGroup = (i: number) => cards.filter((c) => groups[i].includes(c.lane)).length
     samples.push([cards.filter((c) => c.lane === end).length + archived, inGroup(2), inGroup(1), inGroup(0)])
+  }
+  return samples
+}
+
+/** WIP por carril y puntos que faltan, cada 4 segundos del sprint. */
+function buildMeter(sprint: SprintId, states: Array<{ cards: Card[]; archived: number }>, lands: Land[]) {
+  const lanes = SPRINTS[sprint].lanes
+  const end = lanes[lanes.length - 1].id
+  const seeds = SPRINTS[sprint].seed
+  const pointsOf = new Map(seeds.map((c) => [c.id, c.points]))
+  const samples: Array<{ at: number; lanes: number[]; wip: number; remaining: number }> = []
+  let index = 0
+  let remaining = seeds.filter((c) => c.lane !== end).reduce((n, c) => n + c.points, 0)
+  for (let t = 0; t < LIVE_MS; t += 4000) {
+    while (index < lands.length && lands[index].at <= t) {
+      if (lands[index].to === end) remaining -= pointsOf.get(lands[index].card) ?? 0
+      index += 1
+    }
+    const { cards } = states[index]
+    const counts = lanes.map((l) => cards.filter((c) => c.lane === l.id).length)
+    samples.push({ at: t, lanes: counts, wip: counts.reduce((n, v, i) => n + (lanes[i].kind === 'work' || lanes[i].kind === 'check' ? v : 0), 0), remaining })
   }
   return samples
 }
@@ -562,3 +671,8 @@ export function presenceAt(sprint: SprintId, person: PersonId, local: number) {
 }
 
 export const flowAt = (sprint: SprintId, local: number) => scriptFor(sprint).flow.slice(0, Math.max(1, Math.floor(local / 4000) + 1))
+
+/** Las muestras de medición hasta este momento. Nunca menos de una. */
+export const meterAt = (sprint: SprintId, local: number) => scriptFor(sprint).meter.slice(0, Math.max(1, Math.floor(local / 4000) + 1))
+/** Cuántas muestras tiene un sprint completo: es el ancho fijo de las gráficas. */
+export const METER_SAMPLES = Math.ceil(LIVE_MS / 4000)

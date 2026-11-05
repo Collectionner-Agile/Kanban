@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { LANE, SPRINTS, type SprintId } from '../data/board'
 import { PERSON, TEAM, type PersonId } from '../data/team'
 import { goToCard, overview, refit, setCameraInset } from '../engine/camera'
+import { HARDWARE_ISLAND, SENSOR_H, SENSOR_W } from '../engine/device'
 import { clockText, spanText, useClock } from '../engine/clock'
 import { clearActivity, dismissActivity, holdIsland, setPanelOpen, useBoard, type Activity, type ActivityKind, type Face } from '../store/board'
 import { Clawd, type ClawdAction, type ClawdEyes, type ClawdGear } from './Clawd'
@@ -144,6 +145,11 @@ function readSize(): Size {
   return { W, H, dockTop: H - (dock?.offsetHeight ?? 66) - padding }
 }
 
+/** En un iPhone con isla y en vertical, el aviso nace del sensor. */
+const onSensor = ({ W, H }: Size) => (HARDWARE_ISLAND && W < H ? HARDWARE_ISLAND : null)
+/** Instalada, la página llega al sensor: el contenido va debajo de él. */
+const sensorGap = (size: Size) => (onSensor(size)?.standalone ? SENSOR_H : 0)
+
 const faceStep = (wide: boolean) => (wide ? 24 : 15)
 const FACE_SIZE = 40
 
@@ -157,6 +163,14 @@ function alertWidth(people: number, { W }: Size) {
 
 function panelFrame(body: number, { W, H, dockTop }: Size) {
   const wide = W >= WIDE_FROM
+  const sensor = onSensor({ W, H, dockTop })
+  if (sensor) {
+    const width = Math.min(W - 16, 480)
+    const gap = sensor.standalone ? SENSOR_H : 0
+    const wanted = HEAD_H + body + gap
+    const most = dockTop - sensor.top - 8
+    return { x: (W - width) / 2, y: sensor.top, width, height: Math.min(wanted, most), capped: wanted > most }
+  }
   const wanted = HEAD_H + body
   if (wide) {
     const height = Math.min(wanted, dockTop - 72)
@@ -174,6 +188,13 @@ function shapeOf(mode: Mode, size: Size, people: number, body: number) {
   if (mode === 'open') {
     const { x, y, width, height } = panelFrame(body, size)
     return { x, y, width, height, borderRadius: 24 }
+  }
+  const sensor = onSensor(size)
+  if (sensor) {
+    const gap = sensorGap(size)
+    const width = mode === 'hidden' ? SENSOR_W : mode === 'idle' ? (gap ? SENSOR_W + 104 : 240) : alertWidth(people, size)
+    const height = mode === 'hidden' ? SENSOR_H : mode === 'idle' ? (gap ? SENSOR_H : 38) : 60 + gap
+    return { x: (size.W - width) / 2, y: sensor.top, width, height, borderRadius: mode === 'alert' && gap ? 32 : height / 2 }
   }
   const width = mode === 'hidden' ? 44 : mode === 'idle' ? 240 : alertWidth(people, size)
   const height = mode === 'hidden' ? 10 : mode === 'idle' ? 38 : 60
@@ -216,7 +237,7 @@ function Faces({ items, wide }: { items: Activity[]; wide: boolean }) {
   )
 }
 
-function IdleContent({ onOpen, count, recent }: { onOpen: () => void; count: number; recent: PersonId[] }) {
+function IdleContent({ onOpen, count, recent, around }: { onOpen: () => void; count: number; recent: PersonId[]; around: boolean }) {
   return (
     <button
       type="button"
@@ -228,14 +249,14 @@ function IdleContent({ onOpen, count, recent }: { onOpen: () => void; count: num
       className="flex size-full items-center gap-2 pr-[52px] pl-2 text-[13px] font-medium text-white"
     >
       <span className="flex shrink-0 -space-x-1.5">
-        {recent.map((id, i) => (
+        {(around ? recent.slice(0, 1) : recent).map((id, i) => (
           <span key={id} className="block rounded-full shadow-[0_0_0_2px_var(--island)]">
             <StillFace person={PERSON[id]} face="idle" size={24} index={i} />
           </span>
         ))}
       </span>
-      <span className="flex-1 text-left">Actividad</span>
-      <span className="text-white/60 tabular-nums">{count}</span>
+      {!around && <span className="flex-1 text-left">Actividad</span>}
+      {!around && <span className="text-white/60 tabular-nums">{count}</span>}
     </button>
   )
 }
@@ -525,7 +546,8 @@ export function Island() {
 
   // La cámara encuadra en lo que queda libre: a la derecha en web, arriba de la hoja en el teléfono.
   const insetRight = open && wide ? PANEL_WIDTH + EDGE * 2 : 0
-  const insetBottom = open && !wide ? size.H - frame.y : 0
+  const gap = sensorGap(size)
+  const insetBottom = open && !wide && !onSensor(size) ? size.H - frame.y : 0
   useEffect(() => {
     setCameraInset(insetRight, insetBottom)
   }, [insetRight, insetBottom])
@@ -579,7 +601,7 @@ export function Island() {
       </p>
       <motion.div
         data-island={mode}
-        className={`island absolute top-0 left-0 z-[25] ${hidden ? 'pointer-events-none' : ''}`}
+        className={`island absolute top-0 left-0 ${onSensor(size) ? 'z-[35]' : 'z-[25]'} ${hidden ? 'pointer-events-none' : ''}`}
         initial={false}
         animate={{ ...shape, opacity: hidden ? 0 : 1 }}
         transition={
@@ -596,7 +618,7 @@ export function Island() {
             <motion.div
               key={key}
               className={`absolute ${mode === 'open' ? 'inset-y-0 left-0' : 'top-1/2 left-1/2'}`}
-              style={mode === 'open' ? { width: frame.width } : { width: shape.width, height: shape.height, marginLeft: -shape.width / 2, marginTop: -shape.height / 2 }}
+              style={mode === 'open' ? { width: frame.width, top: gap } : { width: shape.width, height: shape.height - (mode === 'alert' ? gap : 0), marginLeft: -shape.width / 2, marginTop: -shape.height / 2 + (mode === 'alert' ? gap : 0) }}
               initial={{ opacity: 0, y: mode === 'open' ? 8 : 0 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, transition: { duration: 0.14, ease: 'easeOut' } }}
@@ -604,7 +626,7 @@ export function Island() {
             >
               {mode === 'open' && <PanelContent width={frame.width} capped={frame.capped} rows={rows} total={activity.length} counts={counts} who={who} setWho={setWho} onClose={onClose} />}
               {mode === 'alert' && items && <AlertContent items={items} waiting={waiting} wide={wide} compact={size.W < 1400} onOpen={onOpen} />}
-              {mode === 'idle' && <IdleContent onOpen={onOpen} count={activity.length} recent={recent} />}
+              {mode === 'idle' && <IdleContent onOpen={onOpen} count={activity.length} recent={recent} around={gap > 0} />}
             </motion.div>
           )}
         </AnimatePresence>
@@ -615,10 +637,10 @@ export function Island() {
           initial={false}
           animate={
             mode === 'open'
-              ? { x: 8, y: 7, opacity: 1, scale: 1 }
+              ? { x: 8, y: 7 + gap, opacity: 1, scale: 1 }
               : hidden
                 ? { x: (shape.width - CLAWD_W) / 2, y: (shape.height - CLAWD_H) / 2, opacity: 0, scale: 0.4 }
-                : { x: shape.width - CLAWD_W - 10, y: (shape.height - CLAWD_H) / 2, opacity: 1, scale: 1 }
+                : { x: shape.width - CLAWD_W - 10, y: (shape.height - CLAWD_H + (mode === 'alert' ? gap : 0)) / 2, opacity: 1, scale: 1 }
           }
           transition={calm ? { duration: 0 } : spring}
         >

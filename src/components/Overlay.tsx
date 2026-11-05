@@ -57,13 +57,12 @@ function CursorView({ person, label, pose, visible, x, y }: { person: Person; la
         <motion.div className="absolute -top-[6px] -left-[13px] drop-shadow-[0_2px_2px_rgb(0_0_0/0.3)]" style={{ rotate, originX: '50%', originY: '70%' }}>
           <Hand person={person} pose={pose} />
         </motion.div>
-        <span
-          className="absolute top-[37px] left-[16px] rounded-[6px] px-1.5 py-[4px] text-[12px] leading-none font-medium whitespace-nowrap text-white"
-          style={{ backgroundColor: person.color }}
-        >
-          {person.name}
-          {label ? ` ${label}` : ''}
-        </span>
+        {/* Solo en camino, y solo el nombre: lo que hace se lee en la cartilla, sin taparla. */}
+        {!label && (
+          <span className="absolute top-[37px] left-[16px] rounded-[6px] px-1.5 py-[4px] text-[12px] leading-none font-medium whitespace-nowrap text-white" style={{ backgroundColor: person.color }}>
+            {person.name}
+          </span>
+        )}
       </motion.div>
     </motion.div>
   )

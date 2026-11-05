@@ -1,9 +1,10 @@
+import { MOBILE } from '../data/mobile'
 import { motion, useTransform } from 'motion/react'
 import { CLASSES, LANE, type Card } from '../data/board'
 import { PERSON } from '../data/team'
 import { removeNote } from '../engine/localNotes'
 import { clockText, dayText, deltaOf, hourText, spanText, statusOf, useClock } from '../engine/clock'
-import { isActive, progressOf, type Beat, type Face } from '../store/board'
+import { isActive, progressOf, useBoard, type Beat, type Face } from '../store/board'
 import { HealthBadge, HealthCap } from './HealthBadge'
 import { useHealthStyle } from './useHealthStyle'
 import { Portrait } from './Portrait'
@@ -106,6 +107,39 @@ function RemoveNote({ card }: { card: Card }) {
   )
 }
 
+/** Lo que le están haciendo a esta nota. Tiene su lugar reservado: nunca tapa nada ni mueve nada. */
+function ActionRow({ card, name, color }: { card: Card; name: string; color: string }) {
+  const label = useBoard((s) => {
+    if (card.local) return s.localCursors.find((c) => c.id === `cursor-${card.id}`)?.label ?? ''
+    const agent = s.agents[card.owner]
+    return agent.ready && agent.card === card.id && agent.label !== 'disponible' ? agent.label : ''
+  })
+  return (
+    <p data-action-row className="mt-2 flex h-[22px] items-center">
+      {label && (
+        <span className="truncate rounded-[6px] px-1.5 py-[4px] text-[12px] leading-none font-medium text-white" style={{ backgroundColor: color }}>
+          {name} {label}
+        </span>
+      )}
+    </p>
+  )
+}
+
+/** Código, historia y tareas del DoD hechas, tal como están en el backlog. */
+function BacklogLine({ card }: { card: Card }) {
+  if (card.local || !card.hu) return null
+  const ended = LANE[card.lane].kind === 'end'
+  const link = MOBILE[card.key]
+  const dod = card.dod ? `, DoD ${ended ? card.dod.total : card.dod.done} de ${card.dod.total}` : ''
+  return (
+    <p className="mt-1.5 text-[11.5px] leading-[1.3] text-faint" title={`${card.key}, ${card.points} puntos`}>
+      {card.key}, {card.hu}
+      {dod}
+      {link ? `, app ${link.state.toLowerCase()}` : ''}
+    </p>
+  )
+}
+
 export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, worked = false }: NoteBodyProps) {
   const cls = CLASSES[card.cls]
   const person = PERSON[card.owner]
@@ -160,6 +194,7 @@ export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, w
         {card.title}
       </p>
       {card.note && <p className="mt-1.5 text-[12.5px] leading-[1.35] text-soft">{card.note}</p>}
+      <BacklogLine card={card} />
 
       <div className="mt-3.5 flex items-center gap-2.5">
         <Portrait person={person} face={face} beat={beat} nonce={nonce} size={46} index={index} />
@@ -177,6 +212,7 @@ export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, w
         {isActive(card.lane) && <ProgressRing cardId={card.id} color={person.color} />}
       </div>
       <TimeLine card={card} />
+      <ActionRow card={card} name={person.name} color={person.color} />
 
       {card.local && (
         <p className="mt-2 flex items-center justify-between gap-2 text-[11.5px] leading-none text-faint">
