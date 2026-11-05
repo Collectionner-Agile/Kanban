@@ -86,7 +86,7 @@ export function frame(rect: { x: number; y: number; w: number; h: number }, zoom
   const stage = stageEl()
   if (!stage) return
   const x = viewWidth(stage) / 2 - (rect.x + rect.w / 2) * zoom
-  const y = viewHeight(stage) * (HARDWARE_ISLAND && stage.clientWidth < stage.clientHeight ? 0.52 : 0.46) - (rect.y + rect.h / 2) * zoom
+  const y = HARDWARE_ISLAND && stage.clientWidth < stage.clientHeight ? (HARDWARE_ISLAND.standalone ? 196 : 180) - rect.y * zoom : viewHeight(stage) * 0.46 - (rect.y + rect.h / 2) * zoom
   flyCamera(x, y, zoom, seconds)
 }
 

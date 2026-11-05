@@ -145,6 +145,7 @@ function readSize(): Size {
   return { W, H, dockTop: H - (dock?.offsetHeight ?? 66) - padding }
 }
 
+const ALERT_AROUND_H = 84
 /** En un iPhone con isla y en vertical, el aviso nace del sensor. */
 const onSensor = ({ W, H }: Size) => (HARDWARE_ISLAND && W < H ? HARDWARE_ISLAND : null)
 /** Instalada, la página llega al sensor: el contenido va debajo de él. */
@@ -193,8 +194,8 @@ function shapeOf(mode: Mode, size: Size, people: number, body: number) {
   if (sensor) {
     const gap = sensorGap(size)
     const width = mode === 'hidden' ? SENSOR_W : mode === 'idle' ? (gap ? SENSOR_W + 104 : 240) : alertWidth(people, size)
-    const height = mode === 'hidden' ? SENSOR_H : mode === 'idle' ? (gap ? SENSOR_H : 38) : 60 + gap
-    return { x: (size.W - width) / 2, y: sensor.top, width, height, borderRadius: mode === 'alert' && gap ? 32 : height / 2 }
+    const height = mode === 'hidden' ? SENSOR_H : mode === 'idle' ? (gap ? SENSOR_H : 38) : gap ? ALERT_AROUND_H : 60
+    return { x: (size.W - width) / 2, y: sensor.top, width, height, borderRadius: mode === 'alert' && gap ? 34 : height / 2 }
   }
   const width = mode === 'hidden' ? 44 : mode === 'idle' ? 240 : alertWidth(people, size)
   const height = mode === 'hidden' ? 10 : mode === 'idle' ? 38 : 60
@@ -261,7 +262,7 @@ function IdleContent({ onOpen, count, recent, around }: { onOpen: () => void; co
   )
 }
 
-function AlertContent({ items, waiting, wide, compact, onOpen }: { items: Activity[]; waiting: number; wide: boolean; compact: boolean; onOpen: () => void }) {
+function AlertContent({ items, waiting, wide, compact, around, onOpen }: { items: Activity[]; waiting: number; wide: boolean; compact: boolean; around: boolean; onOpen: () => void }) {
   const lead = items[0]
   const isTip = lead.kind === 'tip'
   return (
@@ -272,8 +273,9 @@ function AlertContent({ items, waiting, wide, compact, onOpen }: { items: Activi
       aria-controls="activity-panel"
       aria-label={`Abrir actividad. ${plainSentence(items)}`}
       onClick={onOpen}
-      className="flex size-full items-center gap-3 pr-[60px] pl-2.5 text-left"
+      className={around ? 'relative block size-full text-left' : 'flex size-full items-center gap-3 pr-[60px] pl-2.5 text-left'}
     >
+      <span className={around ? 'absolute top-1 left-3 block origin-top-left scale-[0.76]' : 'contents'}>
       {isTip ? (
         <span className="flex shrink-0 -space-x-3">
           {TEAM.slice(0, 2).map((person, i) => (
@@ -285,13 +287,14 @@ function AlertContent({ items, waiting, wide, compact, onOpen }: { items: Activi
       ) : (
         <Faces items={items} wide={wide} />
       )}
-      <span className="min-w-0 flex-1">
+      </span>
+      <span className={around ? 'absolute inset-x-4 top-[39px] block' : 'min-w-0 flex-1'}>
         <span data-island-line className="block truncate text-[14px] leading-[1.3] text-white/75">
           {isTip ? <b className="font-semibold text-white">{lead.title}</b> : <Sentence items={items} compact={compact} />}
         </span>
         <span className="block truncate text-[13px] leading-[1.35] text-white/60">{isTip ? 'O mira cómo avanza el equipo' : joinNames(items.map((a) => a.title))}</span>
       </span>
-      {waiting > 0 && <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[11.5px] leading-none font-medium text-white/80 tabular-nums">+{waiting}</span>}
+      {waiting > 0 && <span className={`${around ? 'absolute top-[11px] right-[58px]' : ''} shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[11.5px] leading-none font-medium text-white/80 tabular-nums`}>+{waiting}</span>}
     </button>
   )
 }
@@ -565,6 +568,10 @@ export function Island() {
     wasOpen.current = open
   }, [open, wide])
 
+  useEffect(() => {
+    if (HARDWARE_ISLAND) document.documentElement.dataset.islandMode = mode
+  }, [mode])
+
   useEffect(() => () => setCameraInset(0, 0), [])
 
   useEffect(() => {
@@ -618,14 +625,14 @@ export function Island() {
             <motion.div
               key={key}
               className={`absolute ${mode === 'open' ? 'inset-y-0 left-0' : 'top-1/2 left-1/2'}`}
-              style={mode === 'open' ? { width: frame.width, top: gap } : { width: shape.width, height: shape.height - (mode === 'alert' ? gap : 0), marginLeft: -shape.width / 2, marginTop: -shape.height / 2 + (mode === 'alert' ? gap : 0) }}
+              style={mode === 'open' ? { width: frame.width, top: gap } : { width: shape.width, height: shape.height, marginLeft: -shape.width / 2, marginTop: -shape.height / 2 }}
               initial={{ opacity: 0, y: mode === 'open' ? 8 : 0 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, transition: { duration: 0.14, ease: 'easeOut' } }}
               transition={{ duration: 0.22, ease: 'easeOut', delay: mode === 'open' ? 0.09 : 0.03 }}
             >
               {mode === 'open' && <PanelContent width={frame.width} capped={frame.capped} rows={rows} total={activity.length} counts={counts} who={who} setWho={setWho} onClose={onClose} />}
-              {mode === 'alert' && items && <AlertContent items={items} waiting={waiting} wide={wide} compact={size.W < 1400} onOpen={onOpen} />}
+              {mode === 'alert' && items && <AlertContent items={items} waiting={waiting} wide={wide} compact={size.W < 1400} around={gap > 0} onOpen={onOpen} />}
               {mode === 'idle' && <IdleContent onOpen={onOpen} count={activity.length} recent={recent} around={gap > 0} />}
             </motion.div>
           )}
@@ -640,7 +647,7 @@ export function Island() {
               ? { x: 8, y: 7 + gap, opacity: 1, scale: 1 }
               : hidden
                 ? { x: (shape.width - CLAWD_W) / 2, y: (shape.height - CLAWD_H) / 2, opacity: 0, scale: 0.4 }
-                : { x: shape.width - CLAWD_W - 10, y: (shape.height - CLAWD_H + (mode === 'alert' ? gap : 0)) / 2, opacity: 1, scale: 1 }
+                : { x: shape.width - CLAWD_W - 10, y: mode === 'alert' && gap ? 3 : (shape.height - CLAWD_H) / 2, opacity: 1, scale: 1 }
           }
           transition={calm ? { duration: 0 } : spring}
         >

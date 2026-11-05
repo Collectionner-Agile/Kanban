@@ -163,11 +163,20 @@ body.is-panning * {
   }
 }
 @media (orientation: portrait) {
+  html[data-hw-island] .controls-top {
+    transition: transform 0.42s cubic-bezier(0.2, 0, 0, 1);
+  }
   html[data-hw-island="browser"] .controls-top {
-    padding-top: 74px;
+    padding-top: 50px;
   }
   html[data-hw-island="app"] .controls-top {
-    padding-top: 116px;
+    padding-top: calc(max(env(safe-area-inset-top), 59px) + 6px);
+  }
+  html[data-hw-island="browser"][data-island-mode="alert"] .controls-top {
+    transform: translateY(22px);
+  }
+  html[data-hw-island="app"][data-island-mode="alert"] .controls-top {
+    transform: translateY(40px);
   }
 }
 
