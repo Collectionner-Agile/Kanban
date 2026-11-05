@@ -157,6 +157,7 @@ export function markInput() {
 }
 
 const HANDS_OFF_MS = 7000
+const PHONE_WIDTH = 700
 
 /** Los planos están en el guion: todas las pantallas miran lo mismo en el mismo momento. */
 export function startDirector() {
@@ -191,8 +192,21 @@ export function startDirector() {
     const shot = shots[index]
     const stage = stageEl()
     if (shot.kind === 'overview') {
-      overview()
-      setFocus(null)
+      if (stage && stage.clientWidth < PHONE_WIDTH) {
+        // En el teléfono no cabe el plano general y mandaría al inicio del tablero:
+        // la cámara se queda con la última nota que estaba siguiendo, en el carril donde quedó.
+        const previous = shots.slice(0, index).reverse().find((x) => x.kind !== 'overview')
+        const id = previous && 'card' in previous ? previous.card : null
+        const el = id ? document.querySelector(`[data-card="${id}"]`) : null
+        const card = id ? getState().cards.find((c) => c.id === id) : null
+        if (el && card) {
+          frame(worldRectOf(el), 1)
+          setFocus([card.lane])
+        }
+      } else {
+        overview()
+        setFocus(null)
+      }
     } else if (shot.kind === 'close') {
       const el = document.querySelector(`[data-card="${shot.card}"]`)
       if (el) {

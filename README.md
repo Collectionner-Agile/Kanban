@@ -2,6 +2,8 @@
 
 Tablero Kanban diseñado con STATIK. Solo diseño: los datos viven en memoria y no hay backend.
 
+Es el tablero de Collectionner, la plataforma de coleccionismo y subastas. Sprint 1 (MVP): lo que falta para lanzar. Sprint 2 (Incremento): entrenar la IA de deep learning que reconoce cada pieza.
+
 ```bash
 npm install
 npm run dev

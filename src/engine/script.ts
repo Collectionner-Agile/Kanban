@@ -70,11 +70,11 @@ const VERB: Partial<Record<LaneId, string>> = {
   review: 'pasa revisión',
   qa: 'prueba',
   demo: 'presenta',
-  refined: 'refina',
-  build: 'mejora',
-  integrate: 'integra',
-  regress: 'comprueba',
-  accept: 'valida',
+  refined: 'prepara datos',
+  build: 'entrena',
+  integrate: 'valida',
+  regress: 'compara',
+  accept: 'prueba',
   deploy: 'despliega',
 }
 

@@ -67,3 +67,8 @@ Geist en todo. Titulares con espaciado -0.035em.
 - Sin iniciar (gris): sigue en el primer carril. En curso (azul): avanza dentro de lo planificado. Regular (ámbar): por vencer, regresó o espera lugar. Crítico (rojo): pasó de la hora planificada. Completo (verde): entregada.
 - La tarjeta "Estados de las notas" junto al objetivo explica cada color y cuenta las notas en vivo. El mapa marca con un punto rojo los carriles con notas críticas.
 - Mapa de carriles: cada cara se mueve solo cuando su persona empieza a trabajar una nota o la entrega en otro carril. Tiene un lugar fijo dentro del carril, así quien llega no mueve a los demás.
+- Cámara en el teléfono: no hay plano general, porque mandaría al inicio del tablero. Se queda con la última nota que seguía, en el carril donde quedó.
+
+## Contenido
+
+- Las notas del Sprint 1 salen del documento de contexto de Collectionner: lo que falta para lanzar (épicas E1, E2, E4, E5 y E10) y dos cosas ya hechas. El Sprint 2 es el entrenamiento de la IA: datos, entrenamiento, validación, comparación con Gemini y despliegue.
