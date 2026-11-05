@@ -15,6 +15,7 @@ npm run dev
 - Cambio de sprint: un círculo abre el día o la noche desde la pestaña, con una frase que entra palabra por palabra y no se repite hasta agotar las de ese sprint.
 - Actividad: una isla negra cuenta quién hizo qué y junta a quienes actúan a la vez. Al tocarla se abre el historial, que crece con cada fila; se puede filtrar por persona, saltar a la nota y quitar filas. Sin notificaciones, la isla desaparece.
 - Tiempo real: reloj en vivo, saludo según la hora y notas con fecha, hora, meta y si cumplen lo planificado.
+- Estados: cada nota cambia sola entre Sin iniciar, En curso, Regular, Crítico y Completo, con color y en palabras, y una tarjeta explica cada color.
 - Guion compartido: todas las pantallas ven lo mismo en el mismo momento, sin base de datos, en un bucle de 12 minutos.
 - Notas propias: el botón + crea una nota con responsable y fecha de hoy, que se mueve sola y queda guardada en este navegador. Solo la ve quien la crea.
 - Clawd: la mascota de Claude Code camina por el mapa y reacciona al estado del proyecto. Dibujo basado en [clawd-md](https://github.com/jaameypr/clawd-md) (MIT, © 2026 Jamey Prüfert).

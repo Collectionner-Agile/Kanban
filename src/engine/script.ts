@@ -43,8 +43,8 @@ export const phraseFor = (sprint: SprintId, loop: number) => {
 
 /* ---------- Lo que hace cada persona ---------- */
 
-export type SegType = 'seek' | 'work' | 'grip' | 'haul' | 'drop' | 'rest' | 'wait' | 'idle'
-export type Seg = { t0: number; t1: number; type: SegType; card?: string; lane?: LaneId; to?: LaneId; label?: string; carry?: boolean; stay?: boolean }
+export type SegType = 'seek' | 'work' | 'grip' | 'lift' | 'haul' | 'drop' | 'rest' | 'wait' | 'idle'
+export type Seg = { t0: number; t1: number; type: SegType; card?: string; lane?: LaneId; to?: LaneId; label?: string; carry?: boolean; stay?: boolean; slot?: number }
 export type Land = { at: number; who: PersonId; card: string; from: LaneId; to: LaneId; deltaMs?: number; kind: 'move' | 'back' | 'done' }
 export type ScriptEvent = {
   at: number
@@ -166,13 +166,14 @@ function simulate(sprint: SprintId, scale: number) {
       t += ms
     }
     step('seek', travel(p.at, LANE_INDEX[from]), false)
-    step('grip', 560, true)
+    step('grip', 300, true)
+    step('lift', 320, true)
     step('haul', Math.min(4000, 1500 + Math.abs(LANE_INDEX[to] - LANE_INDEX[from]) * 800) + between(0, 500), true)
     p.at = LANE_INDEX[to]
     step('drop', 200, true)
     queued.push({ at: t, who: p.id, card: id, from, to, kind: LANE[to].kind === 'end' ? 'done' : back ? 'back' : 'move' })
     if (back) returns.set(id, (returns.get(id) ?? 0) + 1)
-    const gap = between(900, 2000)
+    const gap = between(1300, 2300)
     push(p.id, { t0: t, t1: t + gap, type: 'rest', label: 'disponible' })
     p.t = t + gap
     p.after = null
@@ -207,7 +208,7 @@ function simulate(sprint: SprintId, scale: number) {
       }
       const gap = between(900, 2000)
       push(p.id, { t0: p.t, t1: p.t + 3200, type: 'wait', card: id, to: next, label: `espera ${LANE[next].name}` })
-      push(p.id, { t0: p.t + 3200, t1: p.t + 3200 + gap, type: 'rest', label: 'disponible', stay: true })
+      push(p.id, { t0: p.t + 3200, t1: p.t + 3200 + gap, type: 'rest', card: id, label: 'disponible', stay: true })
       p.t += 3200 + gap
       continue
     }
@@ -249,6 +250,8 @@ function simulate(sprint: SprintId, scale: number) {
     if (acted) continue
 
     const rest = between(2400, 4200) + between(900, 2000)
+    const lastOwn = mine[mine.length - 1]
+    if (lastOwn) p.at = LANE_INDEX[laneOf.get(lastOwn) as LaneId]
     push(p.id, { t0: p.t, t1: p.t + rest, type: 'idle', label: 'disponible' })
     p.t += rest
   }
@@ -423,8 +426,19 @@ function buildShots(segs: Record<PersonId, Seg[]>) {
 
 /* ---------- El guion de cada sprint ---------- */
 
+/** Si dos notas van a la vez al mismo carril, cada una sabe su lugar: nunca se encimen al llegar. */
+function assignSlots(segs: Record<PersonId, Seg[]>) {
+  const hauls = Object.values(segs).flat().filter((s) => s.type === 'haul' && s.to)
+  const DROP_MS = 200
+  for (const haul of hauls) {
+    const landsAt = haul.t1 + DROP_MS
+    haul.slot = hauls.filter((other) => other !== haul && other.to === haul.to && other.t1 + DROP_MS < landsAt && other.t1 + DROP_MS > haul.t0).length
+  }
+}
+
 function build(sprint: SprintId) {
   const run = bestRun(sprint)
+  assignSlots(run.segs)
   const states = buildStates(sprint, run.lands)
   const titleOf = (id: string) => SPRINTS[sprint].seed.find((c) => c.id === id)
   const events: ScriptEvent[] = [

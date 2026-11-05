@@ -4,6 +4,8 @@ import { PERSON } from '../data/team'
 import { removeNote } from '../engine/localNotes'
 import { clockText, dayText, deltaOf, hourText, spanText, statusOf, useClock } from '../engine/clock'
 import { isActive, progressOf, type Beat, type Face } from '../store/board'
+import { HealthBadge, HealthCap } from './HealthBadge'
+import { useHealthStyle } from './useHealthStyle'
 import { Portrait } from './Portrait'
 import { Calendar, Check, ClockIcon, Close, Returned } from './icons'
 
@@ -42,9 +44,9 @@ function ProgressRing({ cardId, color }: { cardId: string; color: string }) {
 }
 
 const STATUS_LOOK = {
-  ok: { label: 'A tiempo', dot: 'bg-good', text: 'text-good' },
-  risk: { label: 'Por vencer', dot: 'bg-[#D9A21B]', text: 'text-[#9A6F00] dark-amber' },
-  late: { label: 'Atrasada', dot: 'bg-[var(--accent)]', text: 'text-[var(--accent)]' },
+  ok: { label: 'A tiempo', dot: 'bg-[var(--state-ontrack)]', text: 'text-soft' },
+  risk: { label: 'Por vencer', dot: 'bg-[var(--state-regular)]', text: 'text-[var(--state-regular)]' },
+  late: { label: 'Atrasada', dot: 'bg-[var(--state-critical)]', text: 'text-[var(--state-critical)]' },
 }
 
 /** Inicio y meta reales de la nota, y si va cumpliendo. Se redibuja solo cuando cambia su estado. */
@@ -84,7 +86,7 @@ function DoneTime({ card }: { card: Card }) {
   return (
     <p data-note-time={delta > 0 ? 'overtime' : 'ontime'} className="mt-1 truncate text-[11.5px] leading-[1.2] text-soft" title={`Terminó ${dayText(card.doneAt)} a las ${clockText(card.doneAt)}`}>
       {dayText(card.doneAt)}, {hourText(card.doneAt)},{' '}
-      <span className={delta > 0 ? 'font-medium text-[var(--accent)]' : 'font-medium text-good'}>{delta > 0 ? `${spanText(delta)} tarde` : `${spanText(delta)} antes`}</span>
+      <span className={delta > 0 ? 'font-medium text-[var(--state-critical)]' : 'font-medium text-[var(--state-complete)]'}>{delta > 0 ? `${spanText(delta)} tarde` : `${spanText(delta)} antes`}</span>
     </p>
   )
 }
@@ -109,17 +111,20 @@ export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, w
   const person = PERSON[card.owner]
   const ended = LANE[card.lane].kind === 'end'
   const state = `${lifted ? 'card-lifted' : ''} ${beat ? BEAT_CLASS[beat] : ''}`
+  const health = useHealthStyle(card)
   const ownerRing = (worked || lifted) && !beat ? { boxShadow: `0 0 0 2px ${person.color}, var(${lifted ? '--shadow-lift' : '--shadow-card'})` } : undefined
+  const look = { backgroundColor: health.background, borderColor: health.border, transition: 'background-color 500ms, border-color 500ms', ...ownerRing }
 
   if (ended) {
     return (
-      <div className={`card ${state} flex items-center gap-2.5 p-2.5`} style={ownerRing}>
+      <div className={`card ${state} relative flex items-center gap-2.5 p-2.5 pt-[15px]`} style={look}>
+        <HealthCap state={health.state} />
         <Portrait person={person} face={face} beat={beat} nonce={nonce} size={36} index={index} />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] leading-[1.25] font-medium" title={card.title}>
             {card.title}
           </p>
-          <p className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-good">
+          <p className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--state-complete)]">
             <Check size={11} />
             Entregada por {person.name}
           </p>
@@ -136,7 +141,8 @@ export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, w
   }
 
   return (
-    <div className={`card ${state} relative p-3.5`} style={ownerRing}>
+    <div className={`card ${state} relative p-3.5 pt-[18px]`} style={look}>
+      <HealthCap state={health.state} />
       <div className="flex items-center gap-1.5">
         {card.returned ? (
           <span className={`${CHIP} bg-[var(--accent)] text-white`}>
@@ -147,9 +153,7 @@ export function NoteBody({ card, face, beat, nonce, lifted = false, index = 0, w
           <span className={`${CHIP} ${cls.chip}`}>{cls.label}</span>
         )}
         {card.area && <span className="truncate text-[12px] text-soft">{card.area}</span>}
-        <span className="ml-auto text-[11px] whitespace-nowrap text-faint pointer-coarse:hidden" translate="no">
-          {card.key}
-        </span>
+        <HealthBadge state={health.state} />
       </div>
 
       <p className="mt-3 text-[16px] leading-[1.22] font-medium tracking-[-0.018em] text-pretty" title={card.title}>

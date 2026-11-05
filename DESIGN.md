@@ -51,6 +51,18 @@ Geist en todo. Titulares con espaciado -0.035em.
 
 ## Guion compartido
 
-- Todas las pantallas calculan la misma película a partir de la hora, sin servidor: 12 minutos, 6 por sprint. Quien entra cae en el segundo exacto, y las notas, mouses, isla, cámara y gráfica coinciden.
+- Todas las pantallas calculan la misma película a partir de la hora, sin servidor: 12 minutos, 6 por sprint. Quien entra cae en el segundo exacto, y las notas, manos, isla, cámara y gráfica coinciden.
 - Lo propio de cada pantalla: la entrada, mirar otro sprint un momento, mover la cámara, y quitar filas del historial.
 - Notas propias: se crean con el botón +, piden responsable, tipo, esfuerzo y fecha si aplica, empiezan a moverse solas y se guardan en este navegador. Solo las ve quien las crea. Si una nota del guion necesita el sitio, la propia cede, para que el WIP siempre se respete.
+
+## Manos
+
+- Cada persona mueve sus notas con una mano de cursor clásico, pixelada, de contorno negro y relleno blanco, dibujada para este tablero. Abierta al viajar, señalando con rayitas de clic al trabajar y hecha puño al llevar una nota. La etiqueta lleva el color de la persona.
+- Agarrar: llega, cierra la mano, levanta la nota unos píxeles y recién entonces viaja. Soltar: acompaña la nota hasta su sitio, abre la mano y se aparta un poco.
+- Si dos notas llegan a la vez al mismo carril, la que aterriza antes va arriba y la otra debajo. Cada lugar reservado lleva el color de su dueño y dice qué nota va ahí, así nunca se mezclan.
+
+## Estados
+
+- Cada nota lleva su estado con cabecera de color, tarjeta teñida y etiqueta rellena con el nombre, y cambia solo según lo que le pasa. No hay un estándar único de colores: la base es la de Jira (gris por hacer, azul en curso, verde hecho) y el ámbar y el rojo son para lo que pide atención.
+- Sin iniciar (gris): sigue en el primer carril. En curso (azul): avanza dentro de lo planificado. Regular (ámbar): por vencer, regresó o espera lugar. Crítico (rojo): pasó de la hora planificada. Completo (verde): entregada.
+- La tarjeta "Estados de las notas" junto al objetivo explica cada color y cuenta las notas en vivo. El mapa marca con un punto rojo los carriles con notas críticas.

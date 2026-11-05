@@ -1,5 +1,5 @@
 import { animate } from 'motion/react'
-import type { SprintId } from '../data/board'
+import type { LaneId, SprintId } from '../data/board'
 import { TEAM, type PersonId } from '../data/team'
 import {
   cursors,
@@ -18,7 +18,7 @@ import {
   type Activity,
   type Ghost,
 } from '../store/board'
-import { cardRect, ghostFace, laneDropPoint, pickUp, portraitPoint, settle } from './carry'
+import { PLACE_EASE, cardRect, ghostFace, laneDropPoint, pickUp, portraitPoint, settle } from './carry'
 import { serverNow } from './clock'
 import { currentLocalAlert, haltNotes, localActivity, localFor, tickNotes } from './localNotes'
 import { TRANSITION_MS, activeSprint, boardAt, clockAt, localTime, phraseFor, progressAt, scriptFor, type Land, type Seg } from './script'
@@ -28,6 +28,7 @@ import { TRANSITION_MS, activeSprint, boardAt, clockAt, localTime, phraseFor, pr
  * en el minuto exacto; lo único propio de cada pantalla es cómo se ve, nunca lo que pasa.
  */
 const OPEN_MS = 650
+const PLACE_SECONDS = 0.55
 const ENTER_MS = 1000
 const PEEK_MS = 25_000
 const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7)
@@ -43,17 +44,20 @@ export function peekSprint(sprint: SprintId) {
   return travelTo(sprint, phrases, 2400)
 }
 
-type Attached = { stop: () => void }
+type Attached = { stop: () => void; offsetX: number; offsetY: number }
 const flights = new Map<PersonId, () => void>()
 const attached = new Map<PersonId, Attached>()
 const applied = new Map<PersonId, number>()
 const drifted = new Map<PersonId, number>()
+/** Quienes están dejando una nota: siguen presionando hasta que toca su sitio. */
+const settling = new Set<PersonId>()
 let appliedLands = -1
 let stopped = true
 let lastTick = 0
 let lastActivity = ''
 let lastAlert = ''
 let lastPointCheck = 0
+let beat = 0
 
 const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
 
@@ -88,6 +92,16 @@ function detach(person: PersonId) {
   attached.delete(person)
 }
 
+function setBlocked(person: PersonId, card: string | null) {
+  if ((getState().blockedCards[person] ?? null) === card) return
+  setState((s) => {
+    const blockedCards = { ...s.blockedCards }
+    if (card) blockedCards[person] = card
+    else delete blockedCards[person]
+    return { blockedCards }
+  })
+}
+
 function setWorkingOf(person: PersonId, card: string | null) {
   const current = getState().working[person] ?? null
   if (current === card) return
@@ -97,6 +111,20 @@ function setWorkingOf(person: PersonId, card: string | null) {
     else delete working[person]
     return { working }
   })
+}
+
+/** Levanta la nota y la deja pegada al mouse, en el punto donde la tomó. */
+function grab(person: PersonId, card: string, to: LaneId) {
+  const ghost = pickUp(card, person)
+  if (!ghost) return false
+  setGhost(card, { target: to })
+  const cursor = cursors[person]
+  const offsetX = cursor.x.get() - ghost.x.get()
+  const offsetY = cursor.y.get() - ghost.y.get()
+  const subs = [cursor.x.on('change', (v) => ghost.x.set(v - offsetX)), cursor.y.on('change', (v) => ghost.y.set(v - offsetY))]
+  detach(person)
+  attached.set(person, { stop: () => subs.forEach((off) => off()), offsetX, offsetY })
+  return true
 }
 
 function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) {
@@ -109,7 +137,11 @@ function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) 
   const remaining = Math.max(0, (seg.t1 - local) / 1000)
   const seconds = jump && seg.type !== 'haul' ? 0 : remaining
   setWorkingOf(person, seg.type === 'work' ? (seg.card as string) : null)
-  setAgent(person, { label: seg.label ?? '', pressed: seg.type === 'grip' || seg.type === 'haul' || seg.type === 'drop' })
+  // Sigue en ámbar mientras espera lugar, aunque entre intentos descanse un momento.
+  setBlocked(person, seg.type === 'wait' || seg.stay ? (seg.card as string) : null)
+  if (seg.type !== 'rest' || !settling.has(person)) {
+    setAgent(person, { label: seg.label ?? '', pressed: seg.type === 'grip' || seg.type === 'lift' || seg.type === 'haul' || seg.type === 'drop' })
+  }
   if (!showing) return
   if (seg.type === 'work') drifted.set(person, serverNow() + 1400)
 
@@ -119,25 +151,44 @@ function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) 
     return
   }
 
-  if (seg.type === 'haul' && seg.card && seg.to) {
+  // Presionó y ahora levanta: la nota sube un poco con el mouse antes de viajar.
+  if (seg.type === 'lift' && seg.card && seg.to) {
+    if (jump) {
+      const point = portraitPoint(seg.card)
+      if (point) fly(person, point.x, point.y, 0, '')
+    }
+    if (grab(person, seg.card, seg.to)) {
+      const cursor = cursors[person]
+      flights.get(person)?.()
+      const rise = animate(cursor.y, cursor.y.get() - 7, { duration: Math.max(0.05, remaining), ease: PLACE_EASE })
+      flights.set(person, () => rise.stop())
+    }
+    return
+  }
+
+  if ((seg.type === 'haul' || seg.type === 'drop') && seg.card && seg.to) {
+    if (!attached.has(person)) {
+      if (jump) {
+        const point = portraitPoint(seg.card)
+        if (point) fly(person, point.x, point.y, 0, '')
+      }
+      grab(person, seg.card, seg.to)
+    }
+    const hold = attached.get(person)
     const rect = cardRect(seg.card)
-    const point = portraitPoint(seg.card)
-    if (jump && point) fly(person, point.x, point.y, 0, '')
-    const ghost = pickUp(seg.card, person)
-    if (!ghost || !rect) return
-    setGhost(seg.card, { target: seg.to })
-    const cursor = cursors[person]
-    const offsetX = cursor.x.get() - ghost.x.get()
-    const offsetY = cursor.y.get() - ghost.y.get()
-    const subs = [cursor.x.on('change', (v) => ghost.x.set(v - offsetX)), cursor.y.on('change', (v) => ghost.y.set(v - offsetY))]
-    detach(person)
-    attached.set(person, { stop: () => subs.forEach((off) => off()) })
-    const drop = laneDropPoint(seg.to)
-    if (drop) fly(person, drop.x + offsetX - ghost.w / 2, drop.y + offsetY - rect.h / 2, Math.max(0.05, remaining), `${person}${seg.t0}`)
+    const ghost = getState().ghosts.find((g) => g.id === seg.card)
+    const drop = rect ? laneDropPoint(seg.to, rect.h, seg.slot ?? 0) : null
+    if (seg.type === 'haul') setGhost(seg.card, { slot: seg.slot ?? 0 })
+    if (seg.type === 'haul' && hold && rect && ghost && drop) {
+      fly(person, drop.x + hold.offsetX - ghost.w / 2, drop.y + hold.offsetY - rect.h / 2, Math.max(0.05, remaining), `${person}${seg.t0}`)
+    }
     return
   }
 
   if (seg.type === 'wait' && seg.to) {
+    // Quien entra justo aquí también ve la mano sobre su nota, esperando.
+    const point = jump && seg.card ? portraitPoint(seg.card) : null
+    if (point) fly(person, point.x, point.y, 0, '')
     flashLane(seg.to)
     return
   }
@@ -148,7 +199,10 @@ function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) 
   // Sin trabajo a mano: se acerca sin prisa a su última nota, sin tocar las de otros.
   const own = getState().cards.filter((c) => c.owner === person)
   const last = own[own.length - 1]
-  const point = last ? portraitPoint(last.id) : null
+  // Si ya no tiene notas a la vista (archivadas), espera junto a lo entregado.
+  const lanes = [...document.querySelectorAll<HTMLElement>('[data-lane]')]
+  const endLane = lanes[lanes.length - 1]?.dataset.lane as LaneId | undefined
+  const point = (last ? portraitPoint(last.id) : null) ?? (endLane ? laneDropPoint(endLane, 120) : null)
   if (!point) return
   const wobble = hash(`${person}${seg.t0}`)
   const x = point.x + 6 + (wobble % 24)
@@ -158,18 +212,44 @@ function enter(person: PersonId, seg: Seg | null, local: number, jump: boolean) 
   fly(person, x, y, jump ? 0 : Math.max(0.8, Math.min(3.2, distance / 320)), `${person}${seg.t0}`)
 }
 
+/** Suelta con cuidado: acompaña la nota hasta su sitio, deja de presionar y recién ahí se aparta. */
 async function landed(land: Land) {
-  const state = getState()
-  const ghost: Ghost | undefined = state.ghosts.find((g) => g.id === land.card)
-  detach(land.who)
-  setAgent(land.who, { pressed: false, label: 'disponible' })
-  if (ghost) {
-    setGhost(land.card, { target: null, landing: true, airFace: ghostFace(ghost) })
-    await nextFrames()
-    if (stopped) return
-    await settle(ghost, cardRect(land.card), 0.7)
+  const ghost: Ghost | undefined = getState().ghosts.find((g) => g.id === land.card)
+  const hold = attached.get(land.who)
+  if (!ghost || !hold) {
+    detach(land.who)
+    if (ghost) await settle(ghost, cardRect(land.card), PLACE_SECONDS)
+    setAgent(land.who, { pressed: false, label: 'disponible' })
+    if (!stopped) react(land.card, land.kind === 'done' ? 'done' : land.kind === 'back' ? 'down' : 'up')
+    return
   }
-  if (!stopped) react(land.card, land.kind === 'done' ? 'done' : land.kind === 'back' ? 'down' : 'up')
+  settling.add(land.who)
+  flights.get(land.who)?.()
+  detach(land.who)
+  setGhost(land.card, { target: null, landing: true, airFace: ghostFace(ghost) })
+  await nextFrames()
+  if (stopped) {
+    settling.delete(land.who)
+    return
+  }
+  const rect = cardRect(land.card)
+  const cursor = cursors[land.who]
+  if (rect) {
+    const moves = [
+      animate(cursor.x, rect.x + hold.offsetX, { duration: PLACE_SECONDS, ease: PLACE_EASE }),
+      animate(cursor.y, rect.y + hold.offsetY, { duration: PLACE_SECONDS, ease: PLACE_EASE }),
+    ]
+    flights.set(land.who, () => moves.forEach((m) => m.stop()))
+  }
+  await settle(ghost, rect, PLACE_SECONDS)
+  settling.delete(land.who)
+  if (stopped) return
+  setAgent(land.who, { pressed: false, label: 'disponible' })
+  react(land.card, land.kind === 'done' ? 'done' : land.kind === 'back' ? 'down' : 'up')
+  await new Promise((resolve) => window.setTimeout(resolve, 120))
+  if (stopped) return
+  // Ya soltó: se aparta un poco, sin irse a ningún lado.
+  fly(land.who, cursor.x.get() + 12, cursor.y.get() - 9, 0.35, `${land.who}${land.at}`)
 }
 
 /* ---------- Actividad e isla: las mismas para todos, salvo lo que cada quien quitó de su lista ---------- */
@@ -258,7 +338,7 @@ async function resync(now: number) {
     flights.get(p.id)?.()
     detach(p.id)
   })
-  setState({ cards: [...board.cards, ...localFor(sprint)], archived: board.archived, ghosts: [], working: {}, localCursors: [] })
+  setState({ cards: [...board.cards, ...localFor(sprint)], archived: board.archived, ghosts: [], working: {}, blockedCards: {}, localCursors: [] })
   haltNotes(now)
   for (const card of board.cards) progressOf(card.id).set(progressAt(sprint, card.id, local, card.seedProgress ?? 0))
   appliedLands = board.index
@@ -303,7 +383,8 @@ function tick() {
     return
   }
 
-  syncActivity(now)
+  beat = (beat + 1) % 3
+  if (beat === 0) syncActivity(now)
 
   // Si la pantalla se atrasó (pestaña oculta, equipo ocupado), salta al punto exacto.
   if (now - lastTick > 2000) {
@@ -320,10 +401,6 @@ function tick() {
 
   if (board.index !== appliedLands) {
     const fresh = script.lands.slice(Math.max(0, appliedLands), board.index)
-    fresh.forEach((land) => {
-      const ghost = getState().ghosts.find((g) => g.id === land.card)
-      if (ghost) setGhost(land.card, { target: null, landing: true, airFace: ghostFace(ghost) })
-    })
     setState({ cards: [...board.cards, ...localFor(sprint)], archived: board.archived })
     fresh.forEach((land) => {
       progressOf(land.card).set(progressAt(sprint, land.card, local))
@@ -332,7 +409,7 @@ function tick() {
     appliedLands = board.index
   }
 
-  syncAlert(now)
+  if (beat === 0) syncAlert(now)
   if (sprint !== live) return
   tickNotes(sprint, now)
 
@@ -387,6 +464,7 @@ export function startPlayer() {
 
   return () => {
     stopped = true
+    settling.clear()
     window.clearInterval(timer)
     document.removeEventListener('visibilitychange', onVisible)
     TEAM.forEach((p) => {
@@ -396,7 +474,7 @@ export function startPlayer() {
       setAgent(p.id, { ready: false, pressed: false, label: 'disponible' })
     })
     haltNotes(serverNow())
-    setState({ working: {}, alert: null, waiting: 0, localCursors: [] })
+    setState({ working: {}, blockedCards: {}, alert: null, waiting: 0, localCursors: [] })
     getState().ghosts.forEach((g) => removeGhost(g.id))
     lastAlert = ''
   }

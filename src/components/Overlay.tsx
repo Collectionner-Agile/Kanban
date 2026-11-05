@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useSpring, useTransform, useVelocity, type Mot
 import { PERSON, TEAM, type Person } from '../data/team'
 import { ghostFace } from '../engine/carry'
 import { cursors, findCard, useBoard, type Ghost } from '../store/board'
+import { Hand, type HandPose } from './Hand'
 import { NoteBody } from './NoteBody'
 
 function GhostNote({ ghost }: { ghost: Ghost }) {
@@ -13,6 +14,7 @@ function GhostNote({ ghost }: { ghost: Ghost }) {
   return (
     <motion.div
       data-carried-by={ghost.by}
+      data-target={ghost.target ?? undefined}
       data-owner={card.owner}
       className="absolute top-0 left-0"
       style={{ x: ghost.x, y: ghost.y, width: ghost.w, rotate, zIndex: ghost.by === 'user' ? 45 : 40 }}
@@ -30,42 +32,33 @@ function AgentCursor({ person }: { person: Person }) {
   const on = useBoard((s) => s.agentsOn)
   const scene = useBoard((s) => s.scene)
   const { x, y } = cursors[person.id]
-  return <CursorView person={person} label={agent.label} pressed={agent.pressed} visible={agent.ready && on && scene === 'live'} x={x} y={y} />
+  const working = useBoard((s) => Boolean(s.working[person.id]))
+  const pose: HandPose = agent.pressed ? 'fist' : working ? 'point' : 'open'
+  return <CursorView person={person} label={agent.label} pose={pose} visible={agent.ready && on && scene === 'live'} x={x} y={y} />
 }
 
-function CursorView({ person, label, pressed, visible, x, y }: { person: Person; label: string; pressed: boolean; visible: boolean; x: MotionValue<number>; y: MotionValue<number> }) {
+function CursorView({ person, label, pose, visible, x, y }: { person: Person; label: string; pose: HandPose; visible: boolean; x: MotionValue<number>; y: MotionValue<number> }) {
   const vx = useVelocity(x)
   const vy = useVelocity(y)
 
   // Inclinación por velocidad: idea del componente Cursor de unlumen en 21st.dev.
-  const lean = useTransform([vx, vy], ([a, b]: number[]) => Math.max(-14, Math.min(14, (a / 1000) * 16 + (b / 1000) * 5)))
+  const lean = useTransform([vx, vy], ([a, b]: number[]) => Math.max(-6, Math.min(6, (a / 1000) * 7 + (b / 1000) * 2)))
   const rotate = useSpring(lean, { stiffness: 70, damping: 16 })
 
   return (
     <motion.div className="pointer-events-none absolute top-0 left-0 z-50" style={{ x, y }} aria-hidden="true" data-agent-cursor={person.id} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: visible ? 1 : 0, scale: visible ? (pressed ? 0.88 : 1) : 0.8 }}
-        transition={{ type: 'spring', visualDuration: 0.3, bounce: 0.15 }}
+        animate={{ opacity: visible ? 1 : 0, scale: visible ? (pose === 'fist' ? 0.94 : 1) : 0.8 }}
+        transition={{ type: 'spring', visualDuration: 0.26, bounce: 0.12 }}
         style={{ originX: 0, originY: 0 }}
       >
-        <motion.svg
-          width="24"
-          height="24"
-          viewBox="0 0 40 40"
-          className="block drop-shadow-[0_2px_3px_rgb(0_0_0/0.35)]"
-          style={{ rotate, originX: '5%', originY: '10%' }}
-        >
-          <path
-            d="M1.8 4.4 7 36.2c.3 1.8 2.6 2.3 3.6.8l3.9-5.7c1.7-2.5 4.5-4.1 7.5-4.3l6.9-.5c1.8-.1 2.5-2.4 1.1-3.5L5 2.5c-1.4-1.1-3.5 0-3.3 1.9Z"
-            fill={person.color}
-            stroke="#fff"
-            strokeWidth="2.6"
-            strokeLinejoin="round"
-          />
-        </motion.svg>
+        {/* El punto de la mano que toca la nota queda justo donde apunta el guion. */}
+        <motion.div className="absolute -top-[6px] -left-[13px] drop-shadow-[0_2px_2px_rgb(0_0_0/0.3)]" style={{ rotate, originX: '50%', originY: '70%' }}>
+          <Hand person={person} pose={pose} />
+        </motion.div>
         <span
-          className="absolute top-[21px] left-[13px] rounded-[6px] px-1.5 py-[4px] text-[12px] leading-none font-medium whitespace-nowrap text-white"
+          className="absolute top-[37px] left-[16px] rounded-[6px] px-1.5 py-[4px] text-[12px] leading-none font-medium whitespace-nowrap text-white"
           style={{ backgroundColor: person.color }}
         >
           {person.name}
@@ -90,7 +83,7 @@ export function Overlay() {
       ))}
       <AnimatePresence>
         {own.map((c) => (
-          <CursorView key={c.id} person={PERSON[c.owner]} label={c.label} pressed={c.pressed} visible x={c.x} y={c.y} />
+          <CursorView key={c.id} person={PERSON[c.owner]} label={c.label} pose={c.pressed ? 'fist' : 'open'} visible x={c.x} y={c.y} />
         ))}
       </AnimatePresence>
     </div>

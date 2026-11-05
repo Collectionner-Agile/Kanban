@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { motion } from 'motion/react'
 import type { Lane as LaneData } from '../data/board'
+import { PERSON } from '../data/team'
 import { useBoard } from '../store/board'
 import { NoteCard } from './NoteCard'
 import { Lock } from './icons'
@@ -15,7 +16,9 @@ export const Lane = memo(function Lane({ lane }: { lane: LaneData }) {
 
   const limit = lane.wip
   const full = limit !== null && cards.length >= limit
-  const incoming = ghosts.filter((g) => g.target === lane.id && g.from !== lane.id)
+  // Primero el lugar de la que llega antes: así cada nota va directo al suyo.
+  const incoming = ghosts.filter((g) => g.target === lane.id && g.from !== lane.id).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))
+  const titleOf = (id: string) => allCards.find((c) => c.id === id)
 
   return (
     <section
@@ -68,15 +71,23 @@ export const Lane = memo(function Lane({ lane }: { lane: LaneData }) {
         {cards.map((card, index) => (
           <NoteCard key={card.id} card={card} index={index} />
         ))}
-        {!full && incoming.length > 0 && (
-          <motion.li
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 110 }}
-            transition={{ type: 'spring', visualDuration: 0.4, bounce: 0 }}
-            className="rounded-[14px] shadow-[inset_0_0_0_1.5px_var(--line-strong)]"
-            aria-hidden="true"
-          />
-        )}
+        {incoming.map((ghost) => {
+          const note = titleOf(ghost.id)
+          const color = note ? PERSON[note.owner].color : 'var(--line-strong)'
+          return (
+            <motion.li
+              key={ghost.id}
+              data-slot-for={ghost.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.18 }}
+              className="flex items-start rounded-[14px] p-3 text-[12.5px] leading-[1.3] font-medium"
+              style={{ height: ghost.h, boxShadow: `inset 0 0 0 1.5px ${color}`, color }}
+            >
+              {note ? `Aquí va ${note.title}` : ''}
+            </motion.li>
+          )
+        })}
         {cards.length === 0 && incoming.length === 0 && (
           <li className="rounded-[14px] px-3 py-6 text-center text-[13px] text-faint shadow-[inset_0_0_0_1px_var(--line)]">Sin notas</li>
         )}

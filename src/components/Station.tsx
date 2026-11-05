@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { SPRINTS } from '../data/board'
 import { clockText, dayText, sprintPulse, useClock } from '../engine/clock'
 import { useBoard } from '../store/board'
+import { HealthPill } from './HealthBadge'
 import { Clawd, type ClawdAction, type ClawdEyes, type ClawdGear } from './Clawd'
 
 /* ---------- Reloj: cada dígito rueda por su cuenta ---------- */
@@ -112,7 +113,9 @@ export function Station() {
     if (!chip) return
     const chipBox = chip.getBoundingClientRect()
     const rowBox = row.current.getBoundingClientRect()
-    const next = Math.max(0, Math.min(rowBox.width - CLAWD_W, chipBox.left - rowBox.left + chipBox.width / 2 - CLAWD_W / 2))
+    const pill = row.current.querySelector('[data-health-pill]')?.getBoundingClientRect()
+    const limit = (pill ? pill.left - rowBox.left : rowBox.width) - CLAWD_W - 6
+    const next = Math.max(0, Math.min(limit, chipBox.left - rowBox.left + chipBox.width / 2 - CLAWD_W / 2))
     const distance = Math.abs(next - where.current)
     if (distance < 24) return
     const frame = requestAnimationFrame(() => {
@@ -157,11 +160,14 @@ export function Station() {
           <Clawd size={CLAWD_UNIT} eyes={walk.walking ? 'dots' : mood.eyes} sit={walk.walking ? false : mood.sit} gear={gear} action={walk.walking ? 'walk' : mood.action} mirror={walk.mirror} />
         </button>
       </motion.div>
-      {!roam && (
-        <span className="float pointer-events-auto absolute right-0 bottom-1 inline-flex h-8 items-center rounded-full px-3">
-          <Clock />
-        </span>
-      )}
+      <div className="pointer-events-auto absolute right-0 bottom-1 flex items-center gap-1.5">
+        <HealthPill />
+        {!roam && (
+          <span className="float inline-flex h-8 items-center rounded-full px-3">
+            <Clock />
+          </span>
+        )}
+      </div>
     </div>
   )
 }

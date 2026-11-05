@@ -21,6 +21,8 @@ export type Ghost = {
   x: MotionValue<number>
   y: MotionValue<number>
   w: number
+  h: number
+  slot?: number
   from: LaneId
   target: LaneId | null
   landing: boolean
@@ -61,6 +63,8 @@ export type BoardState = {
   ghosts: Ghost[]
   cardBeats: Record<string, Reaction>
   working: Partial<Record<PersonId, string>>
+  /** Notas esperando lugar en el carril siguiente. */
+  blockedCards: Partial<Record<PersonId, string>>
   agents: Record<PersonId, AgentView>
   localCursors: LocalCursor[]
   laneFlash: Partial<Record<LaneId, number>>
@@ -98,6 +102,7 @@ const initial = (agentsOn: boolean, reduced: boolean): BoardState => {
     ghosts: [],
     cardBeats: {},
     working: {},
+    blockedCards: {},
     agents: perPerson(() => ({ label: 'disponible', pressed: false, ready: false })),
     localCursors: [],
     laneFlash: {},
@@ -258,6 +263,7 @@ export function travelTo(sprint: SprintId, phrase: string, holdMs: number) {
     holdMs,
     ghosts: [],
     working: {},
+    blockedCards: {},
     focus: null,
   })
   return true

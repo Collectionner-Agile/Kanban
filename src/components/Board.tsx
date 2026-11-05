@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { AnimatePresence, LayoutGroup, animate, motion, useMotionValue, useTransform } from 'motion/react'
+import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react'
 import { CLASSES, LANE_INDEX, SPRINTS, type LaneId, type SprintId } from '../data/board'
-import { PERSON, TEAM, type PersonId } from '../data/team'
+import { TEAM, type PersonId } from '../data/team'
 import { cam, frame, goToLane, markInput, overview, overviewScale, panBy, setCameraNow, startDirector, worldRectOf, zoomAt } from '../engine/camera'
 import { peekSprint } from '../engine/player'
 import { setCameraOn, useBoard } from '../store/board'
@@ -9,7 +9,9 @@ import { NewNote } from './NewNote'
 import { FlowChart } from './FlowChart'
 import { Lane } from './Lane'
 import { Overlay } from './Overlay'
-import { Portrait } from './Portrait'
+import { HEALTH, HEALTH_ORDER } from '../data/health'
+import { HealthLegend, LaneAlarm } from './HealthBadge'
+import { StillFace } from './StillFace'
 import { Camera, Close, Plus, Question } from './icons'
 import { Island } from './Island'
 import { Clock, Station } from './Station'
@@ -135,7 +137,7 @@ function Help() {
         aria-expanded={open}
         aria-label="Cómo usar el tablero"
         onClick={() => setOpen((v) => !v)}
-        className="grid size-7 place-items-center rounded-full text-soft transition-colors duration-150 hover:bg-lane hover:text-ink"
+        className="grid size-7 place-items-center rounded-full text-soft transition-colors duration-150 hover:bg-lane hover:text-ink pointer-coarse:size-9"
       >
         <Question size={15} />
       </button>
@@ -159,10 +161,20 @@ function Help() {
                 <b className="font-medium text-ink">WIP</b> es el máximo de notas por carril. Si está lleno, primero se termina una.
               </li>
               <li>La cámara sigue el trabajo sola. Arrastra el fondo o usa la rueda para moverte; ctrl y rueda para acercar.</li>
-              <li>Cada mouse es de una persona y solo mueve las notas de esa persona.</li>
+              <li>Cada mano es de una persona y solo mueve las notas de esa persona.</li>
               <li>La isla negra cuenta quién hizo qué. Tócala para ver todo el historial y filtrar por persona.</li>
               <li>Todas las pantallas ven el mismo tablero en el mismo momento. El punto marca el sprint en vivo.</li>
               <li>Con el botón + creas una nota propia: solo aparece en tu pantalla.</li>
+            </ul>
+            <ul className="mt-3 space-y-1 border-t border-line pt-3 text-[12.5px]">
+              {HEALTH_ORDER.map((state) => (
+                <li key={state} className="flex items-baseline gap-2">
+                  <i className="size-1.5 shrink-0 translate-y-[-1px] rounded-full" style={{ backgroundColor: HEALTH[state].color }} />
+                  <span>
+                    <b className="font-medium">{HEALTH[state].label}.</b> <span className="text-soft">{HEALTH[state].help}</span>
+                  </span>
+                </li>
+              ))}
             </ul>
             <ul className="mt-3 space-y-1 border-t border-line pt-3 text-[12.5px]">
               {Object.values(CLASSES).map((cls) => (
@@ -220,15 +232,36 @@ function Dock() {
     return `${Math.min(1, share) * 100}%`
   })
 
+  // Dónde queda cada cara: en su carril, y un poco al lado si comparte carril con otra.
+  const [widths, setWidths] = useState<Map<string, { left: number; width: number }>>(new Map())
+  useLayoutEffect(() => {
+    const measure = () => {
+      const found = new Map<string, { left: number; width: number }>()
+      row.current?.querySelectorAll<HTMLElement>('[data-dock-lane]').forEach((chip) => found.set(chip.dataset.dockLane as string, { left: chip.offsetLeft, width: chip.offsetWidth }))
+      setWidths(found)
+    }
+    measure()
+    const watcher = new ResizeObserver(measure)
+    if (row.current) watcher.observe(row.current)
+    return () => watcher.disconnect()
+  }, [sprintId])
+  const spots = useMemo(() => {
+    const result = new Map<PersonId, number>()
+    for (const [lane, list] of people) {
+      const box = widths.get(lane)
+      if (!box) continue
+      list.forEach((id, i) => result.set(id, box.left + box.width - 24 - (list.length - 1 - i) * 12))
+    }
+    return result
+  }, [people, widths])
+
   return (
     <nav aria-label="Mapa de carriles" className="float pointer-events-auto rounded-[18px] p-1.5">
       <div ref={row} className="relative">
-        <LayoutGroup>
-          <div className="flex gap-[3px]">
+        <div className="flex gap-[3px]">
             {sprint.lanes.map((lane) => {
               const count = cards.filter((c) => c.lane === lane.id).length
               const full = lane.wip !== null && count >= lane.wip
-              const here = people.get(lane.id) ?? []
               return (
                 <button
                   key={lane.id}
@@ -245,18 +278,27 @@ function Dock() {
                   <span className={`mt-0.5 rounded-full text-[11px] leading-[1.35] ${full ? 'bg-ink px-1.5 font-medium text-card' : 'text-soft'}`}>
                     {lane.wip !== null ? `${count}/${lane.wip}` : count}
                   </span>
-                  <span className="absolute right-1 bottom-1 flex -space-x-2">
-                    {here.map((id) => (
-                      <motion.span key={id} layoutId={`map-${id}`} transition={{ type: 'spring', visualDuration: 0.8, bounce: 0.1 }} className="block rounded-full ring-[1.5px] ring-[var(--card)]">
-                        <Portrait person={PERSON[id]} face="idle" size={20} still />
-                      </motion.span>
-                    ))}
-                  </span>
+                  <LaneAlarm lane={lane.id} />
                 </button>
               )
             })}
-          </div>
-        </LayoutGroup>
+        </div>
+        {/* Cada cara se desliza sola por el mapa, sin hacer que el navegador vuelva a medir todo. */}
+        {TEAM.map((person) => {
+          const where = spots.get(person.id)
+          return (
+            <motion.span
+              key={person.id}
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-1 left-0 block rounded-full ring-[1.5px] ring-[var(--card)]"
+              initial={false}
+              animate={{ x: where ?? 0, opacity: where === undefined ? 0 : 1 }}
+              transition={{ type: 'spring', visualDuration: 0.8, bounce: 0.1 }}
+            >
+              <StillFace person={person} face="idle" size={20} />
+            </motion.span>
+          )
+        })}
         {/* Lo que la cámara está viendo. */}
         <motion.span
           aria-hidden="true"
@@ -273,7 +315,7 @@ function Goal({ text, dates, delivered, ready }: { text: string; dates: string; 
   const lite = useBoard((s) => s.lite)
   const words = text.replace(/\.$/, '').split(' ')
   return (
-    <div className="pb-8">
+    <div>
       <h2 key={text} className="max-w-[min(24ch,calc(100vw-48px))] text-[clamp(30px,3.6vw,56px)] leading-[1.04] font-semibold tracking-[-0.035em]" aria-label={text}>
         {words.map((word, i) => (
           <motion.span
@@ -396,11 +438,12 @@ export function Board({ onReplay }: { onReplay: () => void }) {
           className="absolute top-0 left-0 w-max origin-top-left px-6 pt-[88px] pb-[200px]"
           style={{ x: cam.x, y: cam.y, scale: cam.scale }}
         >
-          <div className="flex items-end gap-16 pl-2 transition-opacity duration-300" style={{ opacity: inCloseUp ? 0 : 1 }}>
+          <div className="flex flex-col gap-3 pb-6 pl-2 transition-opacity duration-300 sm:flex-row sm:items-end sm:gap-12" style={{ opacity: inCloseUp ? 0 : 1 }}>
             <Goal text={sprint.goal} dates={sprint.dates} delivered={delivered} ready={scene !== 'shaft'} />
             <div className="hidden sm:block">
               <FlowChart />
             </div>
+            <HealthLegend sprint={sprintId} />
           </div>
           <div className="flex items-start gap-2.5">
             {sprint.lanes.map((lane) => (
@@ -430,7 +473,7 @@ export function Board({ onReplay }: { onReplay: () => void }) {
             aria-label="Nueva nota"
             title="Nueva nota"
             onClick={() => setCreating(true)}
-            className="ml-0.5 grid size-7 place-items-center rounded-full bg-ink text-card transition-transform duration-150 active:scale-[0.96]"
+            className="ml-0.5 grid size-7 place-items-center rounded-full bg-ink text-card transition-transform duration-150 active:scale-[0.96] pointer-coarse:size-9"
           >
             <Plus size={14} />
           </button>

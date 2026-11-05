@@ -5,6 +5,8 @@ import { findCard, isFull, isHeld, removeGhost, setState, type Face, type Ghost 
 
 export type PageRect = { x: number; y: number; w: number; h: number }
 
+const LANE_GAP = 8
+
 const pageRect = (el: Element): PageRect => worldRectOf(el)
 
 export const cardEl = (id: string) => document.querySelector(`[data-card="${id}"]`)
@@ -23,16 +25,20 @@ export function portraitPoint(id: string) {
   return { x: r.x + r.w * 0.62, y: r.y + r.h * 0.62 }
 }
 
-/** Punto libre del carril: justo debajo de la última nota. */
-export function laneDropPoint(lane: LaneId) {
+/**
+ * Centro del lugar libre del carril para una nota de alto `height`. `slot` son las notas que
+ * llegan antes al mismo carril: cada una se coloca debajo de la anterior, sin encimarse.
+ */
+export function laneDropPoint(lane: LaneId, height: number, slot = 0) {
   const el = laneEl(lane)
   if (!el) return null
   const rect = pageRect(el)
   const notes = el.querySelectorAll('[data-card]')
   const last = notes[notes.length - 1]
   const lastRect = last ? pageRect(last) : null
-  const y = lastRect ? lastRect.y + lastRect.h + 60 : rect.y + 110
-  return { x: rect.x + rect.w / 2, y: Math.min(y, rect.y + rect.h - 12) }
+  const list = el.querySelector('ul')
+  const start = lastRect ? lastRect.y + lastRect.h + LANE_GAP : list ? pageRect(list).y : rect.y + 110
+  return { x: rect.x + rect.w / 2, y: start + slot * (height + LANE_GAP) + height / 2 }
 }
 
 export function pickUp(id: string, by: Ghost['by']): Ghost | null {
@@ -47,6 +53,7 @@ export function pickUp(id: string, by: Ghost['by']): Ghost | null {
     x: motionValue(rect.x),
     y: motionValue(rect.y),
     w: rect.w,
+    h: rect.h,
     from: card.lane,
     target: null,
     landing: false,
@@ -55,9 +62,12 @@ export function pickUp(id: string, by: Ghost['by']): Ghost | null {
   return ghost
 }
 
+/** La curva de dejar algo con cuidado: llega con decisión y frena antes de tocar. */
+export const PLACE_EASE = [0.22, 1, 0.36, 1] as const
+
 const glide = (value: MotionValue<number>, to: number, seconds: number) =>
   new Promise<void>((resolve) => {
-    animate(value, to, { type: 'spring', visualDuration: seconds, bounce: 0, onComplete: () => resolve() })
+    animate(value, to, { duration: seconds, ease: PLACE_EASE, onComplete: () => resolve() })
   })
 
 export async function settle(ghost: Ghost, rect: PageRect | null, seconds: number) {

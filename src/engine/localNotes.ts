@@ -1,7 +1,7 @@
 import { animate, motionValue } from 'motion/react'
 import { LANE, LANE_INDEX, NEXT, PREVIOUS, SPRINTS, reworkLane, type Card, type LaneId, type ServiceClass, type SprintId } from '../data/board'
 import type { PersonId } from '../data/team'
-import { cardRect, ghostFace, laneDropPoint, pickUp, portraitPoint, settle } from './carry'
+import { PLACE_EASE, cardRect, ghostFace, laneDropPoint, pickUp, portraitPoint, settle } from './carry'
 import { markInput, goToCard } from './camera'
 import { dayText, planFor, serverNow } from './clock'
 import { boardAt } from './script'
@@ -18,7 +18,7 @@ export const NOTE_MAX = 120
 const PERSON_IDS: PersonId[] = ['diego', 'luis', 'josediego', 'brenda', 'beth']
 const CLASSES: ServiceClass[] = ['urgent', 'date', 'standard', 'improve']
 
-type Phase = 'rest' | 'work' | 'carry'
+type Phase = 'rest' | 'work' | 'grab' | 'carry'
 type Run = {
   phase: Phase
   until: number
@@ -27,6 +27,8 @@ type Run = {
   to?: LaneId
   cursor?: LocalCursor
   stop?: () => void
+  offsetX?: number
+  offsetY?: number
   waitedFor?: LaneId
   checked?: boolean
 }
@@ -200,7 +202,7 @@ export function removeNote(id: string) {
 export function haltNotes(now: number) {
   for (const [id, run] of runs) {
     endCarry(id)
-    if (run.phase === 'carry') {
+    if (run.phase === 'carry' || run.phase === 'grab') {
       run.phase = 'rest'
       run.until = now + 800
     }
@@ -220,45 +222,58 @@ const spaceIn = (lane: LaneId, sprint: SprintId, now: number, moving: string) =>
   const inLane = (at: number) => boardAt(sprint, at).cards.filter((c) => c.lane === lane).length
   const scripted = Math.max(inLane(now), inLane(now + 12_000))
   const own = localFor(sprint).filter((c) => c.lane === lane).length
-  const coming = [...runs.entries()].filter(([id, r]) => id !== moving && r.phase === 'carry' && r.to === lane).length
+  const coming = [...runs.entries()].filter(([id, r]) => id !== moving && (r.phase === 'carry' || r.phase === 'grab') && r.to === lane).length
   return scripted + own + coming < limit
 }
 
+/** Primero llega el mouse y presiona; la nota se levanta un instante después. */
 function startCarry(note: Card, to: LaneId, now: number) {
   const point = portraitPoint(note.id)
   const rect = cardRect(note.id)
-  const drop = laneDropPoint(to)
   const run = runs.get(note.id) as Run
-  const showing = getState().agentsOn
-  const ms = 2200
-  if (!showing || !point || !rect || !drop) {
+  run.to = to
+  if (!getState().agentsOn || !point || !rect) {
     // Sin movimiento (o sin dónde dibujar): llega igual, sin vuelo.
     run.phase = 'carry'
-    run.to = to
     run.until = now
     return
   }
-  const ghost = pickUp(note.id, note.owner)
-  if (!ghost) {
-    run.until = now + 600
-    return
-  }
-  setGhost(note.id, { target: to })
   const back = LANE_INDEX[to] < LANE_INDEX[note.lane]
   const cursor: LocalCursor = { id: `cursor-${note.id}`, owner: note.owner, label: `(tu nota) ${back ? 'regresa a' : 'lleva a'} ${LANE[to].name}`, pressed: true, x: motionValue(point.x), y: motionValue(point.y) }
   setState((s) => ({ localCursors: [...s.localCursors, cursor] }))
-  const offX = point.x - ghost.x.get()
-  const offY = point.y - ghost.y.get()
+  run.cursor = cursor
+  run.phase = 'grab'
+  run.until = now + 420
+}
+
+function lift(note: Card, run: Run, now: number) {
+  const to = run.to as LaneId
+  const cursor = run.cursor
+  const rect = cardRect(note.id)
+  // Si otra nota ya va en camino a ese carril, esta se coloca debajo.
+  const ahead = getState().ghosts.filter((g) => g.target === to && g.id !== note.id).length
+  const drop = rect ? laneDropPoint(to, rect.h, ahead) : null
+  const ghost = pickUp(note.id, note.owner)
+  if (!ghost || !cursor || !rect || !drop) {
+    endCarry(note.id)
+    run.phase = 'rest'
+    run.until = now + 600
+    return
+  }
+  setGhost(note.id, { target: to, slot: ahead })
+  const offX = cursor.x.get() - ghost.x.get()
+  const offY = cursor.y.get() - ghost.y.get()
   const subs = [cursor.x.on('change', (v) => ghost.x.set(v - offX)), cursor.y.on('change', (v) => ghost.y.set(v - offY))]
+  const ms = 2200
   const ease = [0.42, 0, 0.18, 1] as const
   const flights = [
     animate(cursor.x, drop.x + offX - ghost.w / 2, { duration: ms / 1000, ease }),
     animate(cursor.y, drop.y + offY - rect.h / 2, { duration: ms / 1000, ease }),
   ]
   run.phase = 'carry'
-  run.to = to
   run.until = now + ms
-  run.cursor = cursor
+  run.offsetX = offX
+  run.offsetY = offY
   run.stop = () => {
     subs.forEach((off) => off())
     flights.forEach((f) => f.stop())
@@ -266,9 +281,14 @@ function startCarry(note: Card, to: LaneId, now: number) {
 }
 
 async function land(note: Card, to: LaneId, now: number) {
+  const run = runs.get(note.id)
   const ghost = getState().ghosts.find((g) => g.id === note.id)
+  const cursor = run?.cursor
+  const offX = run?.offsetX ?? 0
+  const offY = run?.offsetY ?? 0
+  run?.stop?.()
+  if (run) run.stop = undefined
   if (ghost) setGhost(note.id, { target: null, landing: true, airFace: ghostFace(ghost) })
-  endCarry(note.id)
   const ended = LANE[to].kind === 'end'
   const back = LANE_INDEX[to] < LANE_INDEX[note.lane]
   const planMs = note.planMs ?? planFor(note.points)
@@ -277,16 +297,27 @@ async function land(note: Card, to: LaneId, now: number) {
   update(note.id, { lane: to, returned: back, returns: note.returns + (back ? 1 : 0), startedAt, dueAt, doneAt: ended ? now : undefined })
   progressOf(note.id).set(ended ? 1 : 0)
   tell(note, ended ? 'done' : back ? 'back' : 'move', note.owner, note.lane, to, ended ? now - dueAt : undefined, ended || back)
-  const run = runs.get(note.id)
   if (run) {
     run.phase = 'rest'
     run.to = undefined
-    run.until = now + 1200
+    run.until = now + 1500
     run.checked = false
   }
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   const live = getState().ghosts.find((g) => g.id === note.id)
-  if (live) await settle(live, cardRect(note.id), 0.6)
+  const rect = cardRect(note.id)
+  // Acompaña la nota hasta su sitio, deja de presionar y recién ahí se va.
+  if (live && cursor && rect) {
+    const seconds = 0.55
+    animate(cursor.x, rect.x + offX, { duration: seconds, ease: PLACE_EASE })
+    animate(cursor.y, rect.y + offY, { duration: seconds, ease: PLACE_EASE })
+    await settle(live, rect, seconds)
+    setLabel(cursor.id, cursor.label, false)
+    await new Promise((resolve) => window.setTimeout(resolve, 260))
+  } else if (live) {
+    await settle(live, rect, 0.55)
+  }
+  endCarry(note.id)
   if (findCard(note.id)) react(note.id, ended ? 'done' : back ? 'down' : 'up')
 }
 
@@ -300,7 +331,7 @@ function makeWay(sprint: SprintId, now: number) {
     for (let i = own.length - 1; i >= 0 && over > 0; i--, over--) {
       const note = own[i]
       const run = runs.get(note.id)
-      if (run?.phase === 'carry') continue
+      if (run?.phase === 'carry' || run?.phase === 'grab') continue
       const back = PREVIOUS[lane.id]
       if (!back) continue
       update(note.id, { lane: back, returned: true, returns: note.returns + 1 })
@@ -340,6 +371,10 @@ export function tickNotes(sprint: SprintId, now: number) {
     }
     if (now < run.until) continue
 
+    if (run.phase === 'grab') {
+      lift(note, run, now)
+      continue
+    }
     if (run.phase === 'carry') {
       void land(note, run.to as LaneId, now)
       continue
@@ -381,6 +416,5 @@ export function tickNotes(sprint: SprintId, now: number) {
     }
     run.waitedFor = undefined
     startCarry(note, next, now)
-    if (run.cursor) setLabel(run.cursor.id, run.cursor.label, true)
   }
 }

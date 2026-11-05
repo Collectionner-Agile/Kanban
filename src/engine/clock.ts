@@ -93,6 +93,20 @@ export function statusOf(card: Card, at: number): TimeStatus {
   return left < (card.planMs ?? 0) * 0.22 ? 'risk' : 'ok'
 }
 
+/**
+ * El estado de una nota. Cambia solo, según lo que le pasa:
+ * gris sin iniciar, azul en curso, ámbar con algún riesgo, rojo atrasada y verde entregada.
+ */
+export type HealthState = 'waiting' | 'ontrack' | 'regular' | 'critical' | 'complete'
+
+export function healthOf(card: Card, at: number, blocked = false): HealthState {
+  const status = statusOf(card, at)
+  if (status === 'waiting') return 'waiting'
+  if (status === 'ontime' || status === 'overtime') return 'complete'
+  if (status === 'late') return 'critical'
+  return status === 'risk' || card.returned || blocked ? 'regular' : 'ontrack'
+}
+
 /** Cuánto se adelantó (negativo) o se pasó (positivo) al terminar. */
 export const deltaOf = (card: Card) => (card.doneAt && card.dueAt ? card.doneAt - card.dueAt : 0)
 

@@ -6,12 +6,12 @@ import { goToCard, overview, refit, setCameraInset } from '../engine/camera'
 import { clockText, spanText, useClock } from '../engine/clock'
 import { clearActivity, dismissActivity, holdIsland, setPanelOpen, useBoard, type Activity, type ActivityKind, type Face } from '../store/board'
 import { Clawd, type ClawdAction, type ClawdEyes, type ClawdGear } from './Clawd'
-import { Portrait } from './Portrait'
+import { StillFace } from './StillFace'
 import { Check, ChevronRight, Close, Lock, Plus, Returned } from './icons'
 
 const ROWS_SHOWN = 40
 /** Las primeras filas salen de inmediato; el resto entra cuando la forma ya terminó de crecer. */
-const ROWS_FIRST = 10
+const ROWS_FIRST = 7
 /** A partir de este ancho la isla vive arriba, entre los controles, y el historial va a la derecha. */
 const WIDE_FROM = 1240
 const PANEL_WIDTH = 360
@@ -208,7 +208,7 @@ function Faces({ items, wide }: { items: Activity[]; wide: boolean }) {
             exit={{ scale: 0.4, opacity: 0 }}
             transition={{ type: 'spring', visualDuration: 0.36, bounce: 0.14 }}
           >
-            <Portrait person={PERSON[faceOf(a)]} face={FACE[lead.kind]} size={FACE_SIZE} index={i} still />
+            <StillFace person={PERSON[faceOf(a)]} face={FACE[lead.kind]} size={FACE_SIZE} index={i} />
           </motion.span>
         ))}
       </AnimatePresence>
@@ -230,7 +230,7 @@ function IdleContent({ onOpen, count, recent }: { onOpen: () => void; count: num
       <span className="flex shrink-0 -space-x-1.5">
         {recent.map((id, i) => (
           <span key={id} className="block rounded-full shadow-[0_0_0_2px_var(--island)]">
-            <Portrait person={PERSON[id]} face="idle" size={24} index={i} still />
+            <StillFace person={PERSON[id]} face="idle" size={24} index={i} />
           </span>
         ))}
       </span>
@@ -257,7 +257,7 @@ function AlertContent({ items, waiting, wide, compact, onOpen }: { items: Activi
         <span className="flex shrink-0 -space-x-3">
           {TEAM.slice(0, 2).map((person, i) => (
             <span key={person.id} className="block rounded-full shadow-[0_0_0_2px_var(--island)]">
-              <Portrait person={person} face="happy" size={FACE_SIZE} index={i} still />
+              <StillFace person={person} face="happy" size={FACE_SIZE} index={i} />
             </span>
           ))}
         </span>
@@ -288,7 +288,7 @@ const Row = memo(function Row({ a, sprint }: { a: Activity; sprint: SprintId }) 
   const body = (
     <>
       <span className="shrink-0">
-        <Portrait person={PERSON[faceOf(a)]} face={FACE[a.kind]} size={34} still />
+        <StillFace person={PERSON[faceOf(a)]} face={FACE[a.kind]} size={34} />
       </span>
       <span className="min-w-0 flex-1 pr-7">
         <span className="block truncate text-[13.5px] leading-[1.3] text-white/75">
@@ -387,12 +387,16 @@ function PanelContent({
 }) {
   const sprint = useBoard((s) => s.sprint)
   const close = useRef<HTMLButtonElement>(null)
-  const [limit, setLimit] = useState(ROWS_FIRST)
+  const [limit, setLimit] = useState(0)
 
   useEffect(() => {
     close.current?.focus({ preventScroll: true })
-    const timer = window.setTimeout(() => setLimit(ROWS_SHOWN), 560)
-    return () => window.clearTimeout(timer)
+    const first = window.setTimeout(() => setLimit(ROWS_FIRST), 380)
+    const rest = window.setTimeout(() => setLimit(ROWS_SHOWN), 900)
+    return () => {
+      window.clearTimeout(first)
+      window.clearTimeout(rest)
+    }
   }, [])
 
   const lines = useMemo(() => linesOf(rows.slice(0, limit)), [rows, limit])
@@ -440,7 +444,7 @@ function PanelContent({
               onClick={() => setWho(person.id)}
               className={`flex flex-col items-center gap-1 rounded-[12px] py-1.5 transition-colors duration-150 ${who === person.id ? 'bg-white/14' : 'hover:bg-white/8'}`}
             >
-              <Portrait person={person} face="idle" size={30} index={i} still />
+              <StillFace person={person} face="idle" size={30} index={i} />
               <span className="text-[11.5px] leading-none text-white/70 tabular-nums">{counts[person.id]}</span>
             </button>
           ))}
