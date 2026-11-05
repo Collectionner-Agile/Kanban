@@ -33,7 +33,7 @@ html[data-sprint="1"] {
   --faint: #8b8983;
   --accent: #e8501c;
   --good: #1a7f5a;
-  --float: rgb(255 255 255 / 0.96);
+  --float: #ffffff;
   --island: #000000;
   --island-shadow: 0 14px 34px -12px rgb(0 0 0 / 0.5);
   --state-complete: #15803d;
@@ -59,7 +59,7 @@ html[data-sprint="2"] {
   --faint: #7f7e7a;
   --accent: #ff6a2b;
   --good: #4fd19a;
-  --float: rgb(30 30 34 / 0.97);
+  --float: #1e1e22;
   --island: #000000;
   --island-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 18px 40px -12px rgb(0 0 0 / 0.9);
   --state-complete: #4ade80;

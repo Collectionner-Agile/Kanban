@@ -66,3 +66,4 @@ Geist en todo. Titulares con espaciado -0.035em.
 - Cada nota lleva su estado con cabecera de color, tarjeta teñida y etiqueta rellena con el nombre, y cambia solo según lo que le pasa. No hay un estándar único de colores: la base es la de Jira (gris por hacer, azul en curso, verde hecho) y el ámbar y el rojo son para lo que pide atención.
 - Sin iniciar (gris): sigue en el primer carril. En curso (azul): avanza dentro de lo planificado. Regular (ámbar): por vencer, regresó o espera lugar. Crítico (rojo): pasó de la hora planificada. Completo (verde): entregada.
 - La tarjeta "Estados de las notas" junto al objetivo explica cada color y cuenta las notas en vivo. El mapa marca con un punto rojo los carriles con notas críticas.
+- Mapa de carriles: cada cara se mueve solo cuando su persona empieza a trabajar una nota o la entrega en otro carril. Tiene un lugar fijo dentro del carril, así quien llega no mueve a los demás.

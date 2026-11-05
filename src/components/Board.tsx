@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react'
-import { CLASSES, LANE_INDEX, SPRINTS, type LaneId, type SprintId } from '../data/board'
+import { CLASSES, SPRINTS, type SprintId } from '../data/board'
 import { TEAM, type PersonId } from '../data/team'
 import { cam, frame, goToLane, markInput, overview, overviewScale, panBy, setCameraNow, startDirector, worldRectOf, zoomAt } from '../engine/camera'
 import { peekSprint } from '../engine/player'
@@ -10,6 +10,8 @@ import { FlowChart } from './FlowChart'
 import { Lane } from './Lane'
 import { Overlay } from './Overlay'
 import { HEALTH, HEALTH_ORDER } from '../data/health'
+import { useClock } from '../engine/clock'
+import { localTime, presenceAt } from '../engine/script'
 import { HealthLegend, LaneAlarm } from './HealthBadge'
 import { StillFace } from './StillFace'
 import { Camera, Close, Plus, Question } from './icons'
@@ -193,33 +195,12 @@ function Help() {
   )
 }
 
-/** Dónde está trabajando cada persona, para ubicarla en el mapa aunque esté fuera de cuadro. */
-function usePeopleByLane(sprint: SprintId) {
-  const cards = useBoard((s) => s.cards)
-  const working = useBoard((s) => s.working)
-  const ghosts = useBoard((s) => s.ghosts)
-  return useMemo(() => {
-    const lanes = SPRINTS[sprint].lanes
-    const result = new Map<LaneId, PersonId[]>()
-    for (const person of TEAM) {
-      const ghost = ghosts.find((g) => g.by === person.id)
-      const workedId = working[person.id]
-      const worked = workedId ? cards.find((c) => c.id === workedId) : undefined
-      const own = cards.filter((c) => c.owner === person.id && lanes[LANE_INDEX[c.lane]]?.kind !== 'end')
-      const furthest = own.sort((a, b) => LANE_INDEX[b.lane] - LANE_INDEX[a.lane])[0]
-      const lane = ghost ? (ghost.target ?? ghost.from) : (worked?.lane ?? furthest?.lane)
-      if (lane) result.set(lane, [...(result.get(lane) ?? []), person.id])
-    }
-    return result
-  }, [cards, working, ghosts, sprint])
-}
-
 /** Mapa flotante: los 10 carriles, con su WIP, quién está en cada uno y qué se ve ahora. */
 function Dock() {
   const sprintId = useBoard((s) => s.sprint)
   const cards = useBoard((s) => s.cards)
   const sprint = SPRINTS[sprintId]
-  const people = usePeopleByLane(sprintId)
+  const where = useClock((now) => TEAM.map((p) => presenceAt(sprintId, p.id, localTime(sprintId, now))).join(','))
   const row = useRef<HTMLDivElement>(null)
   const frameLeft = useTransform(() => {
     const world = document.querySelector<HTMLElement>('[data-world]')
@@ -247,13 +228,15 @@ function Dock() {
   }, [sprintId])
   const spots = useMemo(() => {
     const result = new Map<PersonId, number>()
-    for (const [lane, list] of people) {
+    where.split(',').forEach((lane, i) => {
       const box = widths.get(lane)
-      if (!box) continue
-      list.forEach((id, i) => result.set(id, box.left + box.width - 24 - (list.length - 1 - i) * 12))
-    }
+      if (!box) return
+      // Lugar fijo por persona: si alguien llega al carril, los demás no se mueven.
+      const step = Math.min(9, Math.max(3, (box.width - 24) / (TEAM.length - 1)))
+      result.set(TEAM[i].id, box.left + box.width - 24 - (TEAM.length - 1 - i) * step)
+    })
     return result
-  }, [people, widths])
+  }, [where, widths])
 
   return (
     <nav aria-label="Mapa de carriles" className="float pointer-events-auto rounded-[18px] p-1.5">
@@ -285,15 +268,17 @@ function Dock() {
         </div>
         {/* Cada cara se desliza sola por el mapa, sin hacer que el navegador vuelva a medir todo. */}
         {TEAM.map((person) => {
-          const where = spots.get(person.id)
+          const spot = spots.get(person.id)
           return (
             <motion.span
               key={person.id}
               aria-hidden="true"
               className="pointer-events-none absolute bottom-1 left-0 block rounded-full ring-[1.5px] ring-[var(--card)]"
               initial={false}
-              animate={{ x: where ?? 0, opacity: where === undefined ? 0 : 1 }}
-              transition={{ type: 'spring', visualDuration: 0.8, bounce: 0.1 }}
+              animate={{ x: spot ?? 0, opacity: spot === undefined ? 0 : 1 }}
+              transition={{ duration: 1.1, ease: [0.4, 0, 0.2, 1] }}
+              data-dock-face={person.id}
+              style={{ zIndex: TEAM.length - TEAM.indexOf(person) }}
             >
               <StillFace person={person} face="idle" size={20} />
             </motion.span>

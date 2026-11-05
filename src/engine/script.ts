@@ -424,6 +424,28 @@ function buildShots(segs: Record<PersonId, Seg[]>) {
   return shots
 }
 
+/** Los lugares por los que pasa cada persona, en orden. Sin idas y vueltas por estar buscando una nota. */
+const MIN_STAY_MS = 6000
+
+function buildPresence(sprint: SprintId, segs: Record<PersonId, Seg[]>) {
+  const lanes = SPRINTS[sprint].lanes
+  const presence = {} as Record<PersonId, Array<{ at: number; lane: LaneId }>>
+  for (const person of TEAM) {
+    const own = SPRINTS[sprint].seed.filter((c) => c.owner === person.id)
+    const open = own.filter((c) => LANE[c.lane].kind !== 'end')
+    const start = (open.length ? open : own).reduce<LaneId>((best, c) => (LANE_INDEX[c.lane] > LANE_INDEX[best] ? c.lane : best), own[0]?.lane ?? lanes[0].id)
+    const stops = [{ at: -Infinity, lane: start }]
+    for (const seg of segs[person.id]) {
+      const lane = seg.type === 'work' ? seg.lane : seg.type === 'drop' ? seg.to : undefined
+      if (lane && stops[stops.length - 1].lane !== lane) stops.push({ at: seg.t0, lane })
+    }
+    // Un paso muy breve no se muestra: la cara va directo a donde se va a quedar.
+    const steady = stops.filter((stop, i) => i === 0 || !stops[i + 1] || stops[i + 1].at - stop.at >= MIN_STAY_MS)
+    presence[person.id] = steady.filter((stop, i) => i === 0 || steady[i - 1].lane !== stop.lane)
+  }
+  return presence
+}
+
 /* ---------- El guion de cada sprint ---------- */
 
 /** Si dos notas van a la vez al mismo carril, cada una sabe su lugar: nunca se encimen al llegar. */
@@ -446,7 +468,7 @@ function build(sprint: SprintId) {
     ...run.fulls.map((f) => ({ at: f.at, who: f.who, owner: f.who, kind: 'full' as const, card: f.card, title: titleOf(f.card)?.title ?? '', from: f.from, to: f.to })),
   ].sort((a, b) => a.at - b.at)
   const { slots, shownAt } = buildAlerts(events)
-  return { sprint, segs: run.segs, lands: run.lands, slices: run.slices, closeAt: run.closeAt, states, events, alerts: slots, shownAt, shots: buildShots(run.segs), flow: buildFlow(sprint, states, run.lands) }
+  return { sprint, presence: buildPresence(sprint, run.segs), segs: run.segs, lands: run.lands, slices: run.slices, closeAt: run.closeAt, states, events, alerts: slots, shownAt, shots: buildShots(run.segs), flow: buildFlow(sprint, states, run.lands) }
 }
 
 /** Diagrama de flujo acumulado, ya calculado cada 4 segundos del sprint. */
@@ -527,6 +549,16 @@ export function progressAt(sprint: SprintId, id: string, local: number, seed = 0
     else return s.p0 + ((local - s.t0) / (s.t1 - s.t0)) * (s.p1 - s.p0)
   }
   return value
+}
+
+export function presenceAt(sprint: SprintId, person: PersonId, local: number) {
+  const stops = scriptFor(sprint).presence[person]
+  let lane = stops[0].lane
+  for (const stop of stops) {
+    if (stop.at > local) break
+    lane = stop.lane
+  }
+  return lane
 }
 
 export const flowAt = (sprint: SprintId, local: number) => scriptFor(sprint).flow.slice(0, Math.max(1, Math.floor(local / 4000) + 1))
